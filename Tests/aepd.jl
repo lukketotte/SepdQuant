@@ -3,7 +3,7 @@ module AEPD
 export aepd
 
 using Distributions, LinearAlgebra, SpecialFunctions, Random
-import Base.rand
+import Base.rand, Distributions.pdf, Distributions.logpdf
 
 struct aepd <: ContinuousUnivariateDistribution
     μ::Real
@@ -24,8 +24,8 @@ end
 function pdf(d::aepd, x::Real)
     del = δ(d.p, d.α)
     a = A(x-d.μ, d.p, d.α)
-    C = del^(1/p) / (2^(1/p) * gamma(1+1/p))
-    d.σ * C * exp(-0.5 * del/a * abs((x - d.μ)/d.σ)^p)
+    C = del^(1/d.p) / (2^(1/d.p) * gamma(1+1/d.p))
+    d.σ * C * exp(-0.5 * del/a * abs((x - d.μ)/d.σ)^d.p)
 end
 
 function rand(rng::AbstractRNG, d::aepd)
@@ -35,6 +35,10 @@ function rand(rng::AbstractRNG, d::aepd)
     else
         d.μ + d.σ * 2^(1/d.p) * ((1-d.α) * (rand(Gamma(1/d.p, 1))/del)^(1/d.p))
     end
+end
+
+function logpdf(d::aepd, x::Real)
+    log(pdf(d, x))
 end
 
 end

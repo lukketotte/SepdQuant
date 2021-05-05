@@ -12,17 +12,20 @@ theme(:juno)
     y ~ Normal(m, sqrt(s))
 end
 
-c1 = sample(gdemo(1.5, 2), SMC(), 1000)
+c1 = sample(gdemo([1.5, 1.1, 3.2], 2), SMC(), 1000)
 plot(c1)
 
 @model function aepdmcmc(x)
     α ~ Uniform(0, 1)
-    x ~ aepd(0., 1., 2., α)
+    for i in eachindex(x)
+        x[i] ~ aepd(0., 1., 3., α)
+    end
 end
 
-d = aepd(0., 1., 2., 0.8);
-x = rand(d, 100);
+d = aepd(0., 1., 3., 0.5);
+x = rand(d, 1000);
+√var(x)
 
-c1 = sample(aepdmcmc([-2. 2.]), SMC(), 1000)
+c1 = sample(aepdmcmc(x), SMC(), 1000)
 
 plot(c1)

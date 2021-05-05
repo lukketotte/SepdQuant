@@ -18,14 +18,12 @@ plot(c1)
 @model function aepdmcmc(x)
     α ~ Uniform(0, 1)
     for i in eachindex(x)
-        x[i] ~ aepd(0., 1., 3., α)
+        x[i] ~ aepd(0., 1., 1., α)
     end
 end
 
-d = aepd(0., 1., 3., 0.5);
+d = aepd(0., 1., 1., 0.5);
 x = rand(d, 1000);
-√var(x)
 
 c1 = sample(aepdmcmc(x), SMC(), 1000)
-
 plot(c1)

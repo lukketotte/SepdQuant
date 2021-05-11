@@ -1,5 +1,4 @@
-using Turing
-using StatsPlots
+using Turing, StatsPlots
 include("aepd.jl")
 using .AEPD
 theme(:juno)
@@ -12,18 +11,23 @@ theme(:juno)
     y ~ Normal(m, sqrt(s))
 end
 
-c1 = sample(gdemo([1.5, 1.1, 3.2], 2), SMC(), 1000)
+c1 = sample(gdemo(1.5, 2), SMC(), 1000)
 plot(c1)
 
 @model function aepdmcmc(x)
-    α ~ Uniform(0, 1)
+    α ~ Uniform(0.5, 1)
+    p ~ Uniform(0.5, 3)
+    μ ~ Normal(0, 10)
+    σ ~ InverseGamma(1, 1)
     for i in eachindex(x)
-        x[i] ~ aepd(0., 1., 1., α)
+        x[i] ~ aepd(μ, σ, p, α)
     end
 end
 
-d = aepd(0., 1., 1., 0.5);
-x = rand(d, 1000);
+Bijectors.bijector(d::aepd) = Logit(0., 1.)
+d = aepd(0., 1., 1., 0.7);
+x = rand(d, 200);
 
-c1 = sample(aepdmcmc(x), SMC(), 1000)
+
+c1 = sample(aepdmcmc(x), Gibbs(PG(10, :α), PG(10, :p), PG(10, :μ), PG(10, :σ)), 500)
 plot(c1)

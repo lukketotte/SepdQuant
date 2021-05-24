@@ -39,10 +39,14 @@ function sampleSigma(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Ar
     u1Pos = u₁ .> 0
     u2Pos = u₂ .> 0
     l₁ = maximum((X[u1Pos,:] * β .- y[u1Pos]) .* gamma(1+1/θ) ./ (α .* u₁[u1Pos].^(1/θ)))
-    l₂ = maximum(( y[u2Pos] .- X[u2Pos,:] * β) .* gamma(1+1/θ) ./ ((1-α) .* u₂[u2Pos].^(1/θ)))
+    l₂ = maximum((y[u2Pos] .- X[u2Pos,:] * β) .* gamma(1+1/θ) ./ ((1-α) .* u₂[u2Pos].^(1/θ)))
     σnew = rand(truncated(InverseGamma(ν + size(y)[1] - 1, 1), maximum([l₁ l₂]), Inf), 1)[1]
     σnew === Inf ? maximum([l₁ l₂]) : σnew
 end
+
+rand(truncated(InverseGamma(100, 1), 1, 10), 10)
+
+pdf(truncated(InverseGamma(100, 1), 1, 10), 0.1)
 
 
 sampleβ(X, y, u1, u2, β, α, θ, σ, 10.)
@@ -97,7 +101,7 @@ for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ, σ[i-1])
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ, σ[i-1], 10.)
     σ[i] = sampleSigma(X, y, u1, u2, β[i-1, :], α, θ, 1)
-    σ[i] = 1
+    σ[i] = 3
 end
 
 plot(β[:, 2])

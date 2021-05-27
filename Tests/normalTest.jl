@@ -34,6 +34,8 @@ function σ_update(y::Vector{T}, μ::T, α₀::T, β₀::T, t::N, Tₖ::N) where
     rand(InverseGamma(α_post, β_post))
 end
 
+## need a sampler for
+
 
 σ_update(y, μ[1], α₀, β₀, 1, T)
 

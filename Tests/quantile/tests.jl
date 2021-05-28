@@ -3,7 +3,7 @@ using Plots, PlotThemes
 theme(:juno)
 
 ## generate data
-n = 50
+n = 100
 β = [2.1, 0.8]
 α, θ, σ = 0.5, 2., 1.
 x₁ = rand(Normal(0, 5), n)
@@ -12,10 +12,18 @@ x₂ = rand(Normal(2, 5), n)
 X = [repeat([1], n) x₂]
 y = X * β .+ rand(Normal(0, σ), n)
 
+u1, u2 = sampleLatent(X, y, [2.1, 0.8], α, 2., 1.)
+u1
+θinterval(X, y, u1, u2, β, α, σ) |> println
+
 
 function δ(α::T, θ::T)::T where {T <: Real}
     2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
+
+rand(truncated(Gamma(1, 1/δ(α, θ)), 1, Inf), 100) |> mean
+rand(truncated(Exponential(1), 1, Inf), 100) |> mean
+rand(truncated(Exponential(δ(α, θ)), 1, Inf), 100) |> mean
 
 function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T, σ::T) where {T <: Real}
     n,_ = size(X)
@@ -25,10 +33,10 @@ function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ
         μ = X[i,:] ⋅ β
         if y[i] <= μ
             l = ((μ - y[i]) * gamma(1+1/θ) / (σ * α))^θ
-            u₁[i] = rand(truncated(Gamma(1, 1/δ(α, θ)), l, Inf), 1)[1]
+            u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         else
             l = ((y[i] - μ) * gamma(1+1/θ) / (σ * (1- α)))^θ
-            u₂[i] = rand(truncated(Gamma(1, 1/δ(α, θ)), l, Inf), 1)[1]
+            u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         end
     end
     u₁, u₂
@@ -40,8 +48,6 @@ function sampleSigma(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Ar
     u2Pos = u₂ .> 0
     l₁ = maximum((X[u1Pos,:] * β .- y[u1Pos]) .* gamma(1+1/θ) ./ (α .* u₁[u1Pos].^(1/θ)))
     l₂ = maximum((y[u2Pos] .- X[u2Pos,:] * β) .* gamma(1+1/θ) ./ ((1-α) .* u₂[u2Pos].^(1/θ)))
-    # σnew = rand(truncated(InverseGamma(ν + size(y)[1] - 1, 1), maximum([l₁ l₂]), Inf), 1)[1]
-    # σnew === Inf ? maximum([l₁ l₂]) : σnew
     rand(Pareto(ν + length(y) - 1, maximum([l₁ l₂])), 1)[1]
 end
 
@@ -76,7 +82,6 @@ function sampleθ(θ::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂
     interval = θinterval(X, y, u₁, u₂, β, α, σ)
     prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
     θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
-    prop
 end
 
 
@@ -133,7 +138,7 @@ end
 
 
 
-nMCMC = 2000
+nMCMC = 1000
 σ = zeros(nMCMC)
 σ[1] = 1
 β = zeros(nMCMC, 2)
@@ -152,7 +157,7 @@ end
 plot(β[:, 2])
 plot(σ)
 plot(θ)
-mean(θ)
+
 
 plot(cumsum(σ) ./ (1:nMCMC))
 plot(cumsum(β[:, 2]) ./ (1:nMCMC))

@@ -3,7 +3,7 @@ using Plots, PlotThemes
 theme(:juno)
 
 ## generate data
-n = 100
+n = 30
 β = [2.1, 0.8]
 α, θ, σ = 0.5, 2., 1.
 x₁ = rand(Normal(0, 5), n)
@@ -12,18 +12,9 @@ x₂ = rand(Normal(2, 5), n)
 X = [repeat([1], n) x₂]
 y = X * β .+ rand(Normal(0, σ), n)
 
-u1, u2 = sampleLatent(X, y, [2.1, 0.8], α, 2., 1.)
-u1
-θinterval(X, y, u1, u2, β, α, σ) |> println
-
-
 function δ(α::T, θ::T)::T where {T <: Real}
     2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
-
-rand(truncated(Gamma(1, 1/δ(α, θ)), 1, Inf), 100) |> mean
-rand(truncated(Exponential(1), 1, Inf), 100) |> mean
-rand(truncated(Exponential(δ(α, θ)), 1, Inf), 100) |> mean
 
 function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T, σ::T) where {T <: Real}
     n,_ = size(X)
@@ -32,10 +23,10 @@ function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ
     for i in 1:n
         μ = X[i,:] ⋅ β
         if y[i] <= μ
-            l = ((μ - y[i]) * gamma(1+1/θ) / (σ * α))^θ
+            l = ((μ - y[i]) / (σ * α))^θ
             u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         else
-            l = ((y[i] - μ) * gamma(1+1/θ) / (σ * (1- α)))^θ
+            l = ((y[i] - μ) / (σ * (1-α)))^θ
             u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         end
     end
@@ -46,24 +37,24 @@ function sampleSigma(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Ar
     β::Array{T, 1}, α::T, θ::T, ν::N = 1) where {T, N <: Real}
     u1Pos = u₁ .> 0
     u2Pos = u₂ .> 0
-    l₁ = maximum((X[u1Pos,:] * β .- y[u1Pos]) .* gamma(1+1/θ) ./ (α .* u₁[u1Pos].^(1/θ)))
-    l₂ = maximum((y[u2Pos] .- X[u2Pos,:] * β) .* gamma(1+1/θ) ./ ((1-α) .* u₂[u2Pos].^(1/θ)))
+    l₁ = maximum((X[u1Pos,:] * β .- y[u1Pos]) ./ (α .* u₁[u1Pos].^(1/θ)))
+    l₂ = maximum((y[u2Pos] .- X[u2Pos,:] * β) ./ ((1-α) .* u₂[u2Pos].^(1/θ)))
     rand(Pareto(ν + length(y) - 1, maximum([l₁ l₂])), 1)[1]
 end
 
 function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     n = length(y)
-    θ = range(0.01, 3, length = 2500)
+    θ = range(0.01, 4, length = 2500)
     θₗ, θᵤ = zeros(n), zeros(n)
     for i in 1:n
         if u₁[i] > 0
-            θside = (u₁[i] .^ (1 ./ θ)) ./ gamma.(1 .+ 1 ./ θ)
+            θside = (u₁[i] .^ (1 ./ θ))
             c = (X[i,:] ⋅ β - y[i]) / (α * σ)
             θᵤ[i] = θ[maximum(findall(θside .> c))]
             θₗ[i] = θ[minimum(findall(θside .> c))]
         else
-            θside = (u₂[i] .^ (1 ./ θ)) ./ gamma.(1 .+ 1 ./ θ)
+            θside = (u₂[i] .^ (1 ./ θ))
             c = (y[i] - X[i,:] ⋅ β) / ((1-α) * σ)
             θᵤ[i] = θ[maximum(findall(θside .> c))]
             θₗ[i] = θ[minimum(findall(θside .> c))]
@@ -74,26 +65,34 @@ end
 
 function θcond(θ::T, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T) where {T <: Real}
     n = length(u₁)
-    n*(1+1/θ) * log(δ(α, θ)) - δ(α, θ) * sum(u₁ .+ u₂)
+    n*(1+1/θ) * log(δ(α, θ)) - n*log(gamma(1+1/θ)) - δ(α, θ) * sum(u₁ .+ u₂)
 end
 
 function sampleθ(θ::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     interval = θinterval(X, y, u₁, u₂, β, α, σ)
-    prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
-    θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+    # interval[2] <= interval[1] && println(interval)
+    if minimum(interval) === maximum(interval)
+        interval[1]
+    else
+        prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
+        # θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0.01,1), 1)[1]) ? prop : θ
+        prop
+    end
 end
 
 
 ## conditional density seems to be centered 0.5 too high
-u1, u2 = sampleLatent(X, y, [2.1, 0.8], α, 2., 1.)
+u1, u2 = sampleLatent(X, y, [2.1, 0.8], α, θ, 1.)
 θinterval(X, y, u1, u2, β, α, σ) |> println
+θcond(1., u1, u2, α) - θcond(1.05, u1, u2, α)
 
-n*(1+1/θ) * log(δ(α, θ)) - δ(α, θ) * sum( u1 .+ u2)
+n*(1+1/θ) * log(δ(α, θ)) - n*log(gamma(1+1/θ)) - δ(α, θ) * sum( u1 .+ u2)
 
-p = range(0.5, 4., length = 200)
-pl = [θcond(a, u1, u2, 0.73)  for a in p]
+p = range(0.01, 4., length = 200)
+pl = [θcond(a, u1, u2, 0.5)  for a in p]
 plot(p, pl, legend = false)
+
 
 
 ##
@@ -109,12 +108,12 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
         l = []
         if sum(u1Pos) > 0
             a1 = (y[u1Pos] .- X[u1Pos, 1:end .!= k] * β[1:end .!= k]) ./ X[u1Pos, k]
-            b1 = σ*α ./ X[u1Pos, k] .* u₁[u1Pos].^(1/θ) ./ gamma(1 + 1/θ)
+            b1 = σ*α ./ X[u1Pos, k] .* u₁[u1Pos].^(1/θ)
             l = append!(l, a1.+b1)
         end
         if sum(u2Pos) > 0
             a2 = (y[u2Pos] .- X[u2Pos, 1:end .!= k] * β[1:end .!= k]) ./ X[u2Pos, k]
-            b2 = σ*(1-α) ./ X[u2Pos, k] .* u₂[u2Pos].^(1/θ) ./ gamma(1 + 1/θ)
+            b2 = σ*(1-α) ./ X[u2Pos, k] .* u₂[u2Pos].^(1/θ)
             l = append!(l, a2.-b2)
         end
         u1Pos = (X[:, k] .> 0) .& (u₁ .> 0)
@@ -122,12 +121,12 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
         u = []
         if sum(u1Pos) > 0
             a1 = (y[u1Pos] .- X[u1Pos, 1:end .!= k] * β[1:end .!= k]) ./ X[u1Pos, k]
-            b1 = σ*α ./ X[u1Pos, k] .* u₁[u1Pos].^(1/θ) ./ gamma(1 + 1/θ)
+            b1 = σ*α ./ X[u1Pos, k] .* u₁[u1Pos].^(1/θ)
             u = append!(u, a1.+b1)
         end
         if sum(u2Pos) > 0
             a2 = (y[u2Pos] .- X[u2Pos, 1:end .!= k] * β[1:end .!= k]) ./ X[u2Pos, k]
-            b2 = σ*(1-α) ./ X[u2Pos, k] .* u₂[u2Pos].^(1/θ) ./ gamma(1 + 1/θ)
+            b2 = σ*(1-α) ./ X[u2Pos, k] .* u₂[u2Pos].^(1/θ)
             u = append!(u, a2.-b2)
         end
 
@@ -138,20 +137,21 @@ end
 
 
 
-nMCMC = 1000
+nMCMC = 2000
 σ = zeros(nMCMC)
-σ[1] = 1
+σ[1] = 2.5
 β = zeros(nMCMC, 2)
 β[1, :] = [2.1, 0.8]
 θ = zeros(nMCMC)
 θ[1] = 2.
-
+α = 0.5
 for i in 2:nMCMC
     (i % 250 === 0) && println(i)
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
     σ[i] = sampleSigma(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
     θ[i] = sampleθ(θ[i-1], X, y, u1, u2, β[i, :], α, σ[i])
+    # θ[i] = 2.
 end
 
 plot(β[:, 2])
@@ -160,6 +160,6 @@ plot(θ)
 
 
 plot(cumsum(σ) ./ (1:nMCMC))
-plot(cumsum(β[:, 2]) ./ (1:nMCMC))
+plot(cumsum(β[:, 1]) ./ (1:nMCMC))
 
 mean(σ) * √(gamma(1+1/θ))

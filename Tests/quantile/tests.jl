@@ -186,6 +186,8 @@ plot(cumsum(θ) ./ (1:nMCMC))
 mean(θ[5000:nMCMC])
 √var(θ[5000:nMCMC])
 
+mean(β[5000:nMCMC, 2])
+
 """
 CSV.write("beta.csv", DataFrame(β), header = false)
 CSV.write("theta.csv", DataFrame(reshape(θ, nMCMC, 1)), header = false)

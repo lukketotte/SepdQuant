@@ -1,40 +1,8 @@
+module QR
+
+export sampleLatent, sampleσ, sampleθ, sampleβ
+
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
-using Plots, PlotThemes, CSV, DataFrames, StatFiles
-theme(:juno)
-
-## Real data
-dat = load("C:\\Users\\lukar818\\Documents\\PhD\\SMC\\Tests\\data\\nsa_ff.dta") |> DataFrame
-
-
-## generate data
-n = 300
-β = [2.1, 0.8]
-α, θ, σ = 0.5, 2., 1.
-x₂ = rand(Uniform(-3, 3), n)
-X = [repeat([1], n) x₂]
-y = X * β .+ rand(Laplace(0, σ), n)
-
-## tests
-
-# maximum(findall(log.(p) .> log(b)/log(a)))
-u1, u2 = sampleLatent(X, y, β, α, θ, σ)
-int = θinterval(X, y, u1, u2, β, α, σ)
-sampleθ(θ, X, y, u1, u2, β, α, σ) |> println
-sampleθ(θ, truncated(Normal(θ, 0.05), int[1], int[2]), int, X, y, u1, u2, β, α, σ) |> println
-
-
-maximum(c)
-minimum(d)
-
-
-θcond(2., u1, u2, 0.5) - θcond(2.1, u1, u2, 0.5)
-
-p = range(0.01, 4., length = 200)
-pl = [θcond(a, u1, u2, 0.5)  for a in p]
-plot(p, pl, legend = false)
-
-
-##
 
 function δ(α::T, θ::T)::T where {T <: Real}
     2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
@@ -57,7 +25,7 @@ function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ
     u₁, u₂
 end
 
-function sampleSigma(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, θ::T, ν::N = 1) where {T, N <: Real}
     n = length(y)
     lower = zeros(n)
@@ -151,50 +119,4 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
     βsim
 end
 
-
-nMCMC = 50000
-σ = zeros(nMCMC)
-σ[1] = 1.
-β = zeros(nMCMC, 2)
-β[1, :] = [2.1, 0.8]
-θ = zeros(nMCMC)
-θ[1] = 1.
-
-simU1 = zeros(nMCMC, n)
-simU2 = zeros(nMCMC, n)
-for i in 2:nMCMC
-    (i % 250 === 0) && println(i)
-    u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
-    simU1[i,:] = u1
-    simU2[i,:] = u2
-    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
-    σ[i] = sampleSigma(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
-    # σ[i] = 3.
-    interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
-    if minimum(interval) === maximum(interval)
-        θ[i] = interval[1]
-    else
-        d = truncated(Normal(θ[i-1], 0.011), minimum(interval), maximum(interval))
-        θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
-    end
-    # θ[i] = 2.
 end
-
-plot(β[:, 2])
-plot(σ)
-plot(θ)
-
-plot(cumsum(σ) ./ (1:nMCMC))
-plot(cumsum(β[:, 2]) ./ (1:nMCMC))
-plot(cumsum(θ) ./ (1:nMCMC))
-
-mean(θ[5000:nMCMC])
-√var(θ[5000:nMCMC])
-
-mean(β[5000:nMCMC, 2])
-
-"""
-CSV.write("beta.csv", DataFrame(β), header = false)
-CSV.write("theta.csv", DataFrame(reshape(θ, nMCMC, 1)), header = false)
-CSV.write("sigma.csv", DataFrame(reshape(σ, nMCMC, 1)), header = false)
-"""

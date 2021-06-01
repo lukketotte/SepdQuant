@@ -1,25 +1,28 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
-using Plots, PlotThemes
+using Plots, PlotThemes, CSV, DataFrames
 theme(:juno)
-
 ## generate data
-n = 100
+n = 300
 β = [2.1, 0.8]
 α, θ, σ = 0.5, 2., 1.
 x₂ = rand(Uniform(-3, 3), n)
 X = [repeat([1], n) x₂]
-y = X * β .+ rand(Normal(0, σ), n)
+y = X * β .+ rand(Laplace(0, σ), n)
 
 ## tests
 
+# maximum(findall(log.(p) .> log(b)/log(a)))
 u1, u2 = sampleLatent(X, y, β, α, θ, σ)
+int = θinterval(X, y, u1, u2, β, α, σ)
+sampleθ(θ, X, y, u1, u2, β, α, σ) |> println
+sampleθ(θ, truncated(Normal(θ, 0.05), int[1], int[2]), int, X, y, u1, u2, β, α, σ) |> println
 
-ids = u1 .> 0
 
-findall((y[ids] - X[ids,:] * β) .> 0)
-# θinterval(X, y, u1, u2, β, α, σ)
-sampleθ(2., X, y, u1, u2, β, α, σ)
-sampleSigma(X, y, u1, u2, β, α, σ)
+maximum(c)
+minimum(d)
+
+
+θcond(2., u1, u2, 0.5) - θcond(2.1, u1, u2, 0.5)
 
 p = range(0.01, 4., length = 200)
 pl = [θcond(a, u1, u2, 0.5)  for a in p]
@@ -67,7 +70,7 @@ end
 function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     n = length(y)
-    θ = range(0.01, 5, length = 1000)
+    θ = range(0.01, 3, length = 1000)
     θₗ, θᵤ = zeros(n), zeros(n)
     for i in 1:n
         if u₁[i] > 0
@@ -96,9 +99,22 @@ end
 function sampleθ(θ::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     interval = θinterval(X, y, u₁, u₂, β, α, σ)
-    if minimum(interval) > maximum(interval)
+    if minimum(interval) <= maximum(interval)
         prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
         θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+    else
+        minimum(interval)
+    end
+end
+
+function sampleθ(θ::T, d::ContinuousUnivariateDistribution, interval::Array{T, 2},
+    X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+    β::Array{T, 1}, α::T, σ::T) where {T <: Real}
+    if minimum(interval) <= maximum(interval)
+        prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
+        gPrev = logpdf(d, θ)
+        gProp = logpdf(d, prop)
+        θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
     else
         minimum(interval)
     end
@@ -131,25 +147,31 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
 end
 
 
-nMCMC = 10
+nMCMC = 50000
 σ = zeros(nMCMC)
 σ[1] = 1.
 β = zeros(nMCMC, 2)
 β[1, :] = [2.1, 0.8]
 θ = zeros(nMCMC)
-θ[1] = 2.
+θ[1] = 1.
 
 simU1 = zeros(nMCMC, n)
 simU2 = zeros(nMCMC, n)
 for i in 2:nMCMC
     (i % 250 === 0) && println(i)
-    println(i)
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
     simU1[i,:] = u1
     simU2[i,:] = u2
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
     σ[i] = sampleSigma(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
-    θ[i] = sampleθ(θ[i-1], X, y, u1, u2, β[i, :], α, σ[i])
+    # σ[i] = 3.
+    interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
+    if minimum(interval) === maximum(interval)
+        θ[i] = interval[1]
+    else
+        d = truncated(Normal(θ[i-1], 0.011), minimum(interval), maximum(interval))
+        θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
+    end
     # θ[i] = 2.
 end
 
@@ -158,13 +180,14 @@ plot(σ)
 plot(θ)
 
 plot(cumsum(σ) ./ (1:nMCMC))
-plot(cumsum(β[:, 1]) ./ (1:nMCMC))
+plot(cumsum(β[:, 2]) ./ (1:nMCMC))
+plot(cumsum(θ) ./ (1:nMCMC))
 
-## whats going on...
-i = 3
-θinterval(X, y, simU1[i,:], simU2[i,:], β[i,:], α, σ[i])
+mean(θ[5000:nMCMC])
+√var(θ[5000:nMCMC])
 
-
-ids = simU1[i,:] .> 0
-
-simU2[i,:] |> sum
+"""
+CSV.write("beta.csv", DataFrame(β), header = false)
+CSV.write("theta.csv", DataFrame(reshape(θ, nMCMC, 1)), header = false)
+CSV.write("sigma.csv", DataFrame(reshape(σ, nMCMC, 1)), header = false)
+"""

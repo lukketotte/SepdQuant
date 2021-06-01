@@ -7,3 +7,7 @@ theme(:juno)
 dat = load("C:\\Users\\lukar818\\Documents\\PhD\\SMC\\Tests\\data\\nsa_ff.dta") |> DataFrame
 names(dat)
 dropmissing(dat)
+
+describe(dat)
+
+maximum(dropmissing(dat)."fatality_lag_ln")

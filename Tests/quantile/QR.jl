@@ -1,6 +1,6 @@
 module QR
 
-export sampleLatent, sampleσ, sampleθ, sampleβ
+export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval
 
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 
@@ -84,7 +84,7 @@ function sampleθ(θ::T, d::ContinuousUnivariateDistribution, interval::Array{T,
     X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     if minimum(interval) <= maximum(interval)
-        prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
+        prop = rand(d, 1)[1]
         gPrev = logpdf(d, θ)
         gProp = logpdf(d, prop)
         θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
@@ -105,15 +105,17 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
             b₁ = α*σ*(u₁[i]^(1/θ)) / X[i, k]
             b₂ = (1-α)*σ*(u₂[i]^(1/θ)) / X[i, k]
             if (u₁[i] > 0) && (X[i, k] < 0)
-                l = append!(l, a + b₁)
+                append!(l, a + b₁)
             elseif (u₂[i] > 0) && (X[i, k] > 0)
-                l = append!(l, a - b₂)
+                append!(l, a - b₂)
             elseif (u₁[i] > 0) && (X[i, k] > 0)
-                u = append!(u, a + b₁)
+                append!(u, a + b₁)
             elseif (u₂[i] > 0) && (X[i, k] < 0)
-                u = append!(u, a - b₂)
+                append!(u, a - b₂)
             end
         end
+        length(l) == 0. && append!(l, -Inf)
+        length(u) == 0. && append!(u, Inf)
         βsim[k] = maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : maximum(l)
     end
     βsim

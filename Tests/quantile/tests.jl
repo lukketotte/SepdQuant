@@ -116,7 +116,7 @@ function sampleθ(θ::T, d::ContinuousUnivariateDistribution, interval::Array{T,
     X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     if minimum(interval) <= maximum(interval)
-        prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
+        prop = rand(d, 1)[1]
         gPrev = logpdf(d, θ)
         gProp = logpdf(d, prop)
         θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
@@ -124,6 +124,23 @@ function sampleθ(θ::T, d::ContinuousUnivariateDistribution, interval::Array{T,
         minimum(interval)
     end
 end
+
+function sampleθ(θ::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+    β::Array{T, 1}, α::T) where {T <: Real}
+    # get \ubar{\sigma}
+    lower = zeros(n)
+    for i in 1:n
+        μ = X[i,:] ⋅ β
+        if u₁[i] > 0
+            lower[i] = (μ - y[i]) / (α * u₁[i]^(1/θ))
+        else
+            lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
+        end
+    end
+    σᵤ = maximum(lower)
+
+end
+
 
 function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
@@ -152,7 +169,7 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
 end
 
 
-nMCMC = 50000
+nMCMC = 20000
 σ = zeros(nMCMC)
 σ[1] = 1.
 β = zeros(nMCMC, 2)
@@ -168,13 +185,13 @@ for i in 2:nMCMC
     simU1[i,:] = u1
     simU2[i,:] = u2
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
-    σ[i] = sampleSigma(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
+    σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
     # σ[i] = 3.
     interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
     if minimum(interval) === maximum(interval)
         θ[i] = interval[1]
     else
-        d = truncated(Normal(θ[i-1], 0.011), minimum(interval), maximum(interval))
+        d = truncated(Normal(θ[i-1], 0.05), minimum(interval), maximum(interval))
         θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
     end
     # θ[i] = 2.

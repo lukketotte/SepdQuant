@@ -18,13 +18,13 @@ X = X[ids,:]
 ## mcmc test
 n, p = size(X)
 α = 0.5
-nMCMC =  20000
+nMCMC =  30000
 σ = zeros(nMCMC)
 σ[1] = 1.
 β = zeros(nMCMC, p)
 β[1, :] = inv(X'*X) * X' * y
 θ = zeros(nMCMC)
-θ[1] = 1.
+θ[1] = 1.5
 simU1 = zeros(nMCMC, n)
 simU2 = zeros(nMCMC, n)
 
@@ -39,14 +39,14 @@ for i in 2:nMCMC
     if minimum(interval) === maximum(interval)
         θ[i] = interval[1]
     else
-        d = truncated(Normal(θ[i-1], 0.05), minimum(interval), maximum(interval))
+        d = truncated(Normal(θ[i-1], 0.01), minimum(interval), maximum(interval))
         θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
     end
 end
 
 
 plot(θ)
-plot(β[:, 5])
+plot(β[:, 3])
 plot(σ)
 
 plot(cumsum(σ) ./ (1:nMCMC))

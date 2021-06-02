@@ -2,30 +2,19 @@ using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 using Plots, PlotThemes, CSV, DataFrames, StatFiles
 theme(:juno)
 
-## Real data
-dat = load("C:\\Users\\lukar818\\Documents\\PhD\\SMC\\Tests\\data\\nsa_ff.dta") |> DataFrame
-
-
-## generate data
-n = 300
+## tests
+n = 200
 β = [2.1, 0.8]
 α, θ, σ = 0.5, 2., 1.
 x₂ = rand(Uniform(-3, 3), n)
 X = [repeat([1], n) x₂]
 y = X * β .+ rand(Laplace(0, σ), n)
 
-## tests
-
 # maximum(findall(log.(p) .> log(b)/log(a)))
 u1, u2 = sampleLatent(X, y, β, α, θ, σ)
 int = θinterval(X, y, u1, u2, β, α, σ)
 sampleθ(θ, X, y, u1, u2, β, α, σ) |> println
 sampleθ(θ, truncated(Normal(θ, 0.05), int[1], int[2]), int, X, y, u1, u2, β, α, σ) |> println
-
-
-maximum(c)
-minimum(d)
-
 
 θcond(2., u1, u2, 0.5) - θcond(2.1, u1, u2, 0.5)
 
@@ -168,14 +157,24 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
     βsim
 end
 
+## MCMC
 
-nMCMC = 20000
+# generate data
+n = 400
+β = [2.1, 0.8]
+α, θ, σ = 0.5, 2., 1.
+x₂ = rand(Uniform(-3, 3), n)
+X = [repeat([1], n) x₂]
+y = X * β .+ rand(Laplace(0, σ), n)
+
+
+nMCMC = 5000
 σ = zeros(nMCMC)
 σ[1] = 1.
 β = zeros(nMCMC, 2)
 β[1, :] = [2.1, 0.8]
 θ = zeros(nMCMC)
-θ[1] = 1.
+θ[1] = 2.
 
 simU1 = zeros(nMCMC, n)
 simU2 = zeros(nMCMC, n)
@@ -186,7 +185,6 @@ for i in 2:nMCMC
     simU2[i,:] = u2
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
     σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
-    # σ[i] = 3.
     interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
     if minimum(interval) === maximum(interval)
         θ[i] = interval[1]
@@ -194,7 +192,6 @@ for i in 2:nMCMC
         d = truncated(Normal(θ[i-1], 0.05), minimum(interval), maximum(interval))
         θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
     end
-    # θ[i] = 2.
 end
 
 plot(β[:, 2])

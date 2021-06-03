@@ -1,5 +1,8 @@
+include("QR.jl")
+using .QR
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 using Plots, PlotThemes, CSV, DataFrames, StatFiles
+using KernelDensity
 theme(:juno)
 
 ## tests
@@ -160,17 +163,19 @@ end
 ## MCMC
 
 # generate data
-n = 400
+n = 300
 β = [2.1, 0.8]
 α, θ, σ = 0.5, 2., 1.
 x₂ = rand(Uniform(-3, 3), n)
 X = [repeat([1], n) x₂]
-y = X * β .+ rand(Laplace(0, σ), n)
+y = X * β .+ rand(Normal(0, σ), n)
+k = kde(y - X*β)
+x = range(-5, 5, length = 500);
+plot(x, pdf(k, x))
 
-
-nMCMC = 5000
+nMCMC = 20000
 σ = zeros(nMCMC)
-σ[1] = 1.
+σ[1] = 2.
 β = zeros(nMCMC, 2)
 β[1, :] = [2.1, 0.8]
 θ = zeros(nMCMC)
@@ -189,7 +194,7 @@ for i in 2:nMCMC
     if minimum(interval) === maximum(interval)
         θ[i] = interval[1]
     else
-        d = truncated(Normal(θ[i-1], 0.05), minimum(interval), maximum(interval))
+        d = truncated(Normal(θ[i-1], 0.1), minimum(interval), maximum(interval))
         θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
     end
 end
@@ -198,14 +203,14 @@ plot(β[:, 2])
 plot(σ)
 plot(θ)
 
+autocor(θ, [1,3,10,40])
+
 plot(cumsum(σ) ./ (1:nMCMC))
 plot(cumsum(β[:, 2]) ./ (1:nMCMC))
 plot(cumsum(θ) ./ (1:nMCMC))
 
-mean(θ[5000:nMCMC])
-√var(θ[5000:nMCMC])
-
-mean(β[5000:nMCMC, 2])
+u1, u2 = sampleLatent(X, y, β[nMCMC,:], α, θ[nMCMC], σ[nMCMC])
+θinterval(X, y, u1, u2, β[nMCMC,:], α, σ[nMCMC])
 
 """
 CSV.write("beta.csv", DataFrame(β), header = false)

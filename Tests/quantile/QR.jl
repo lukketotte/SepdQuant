@@ -25,42 +25,39 @@ function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ
     u₁, u₂
 end
 
+# TODO: is this sampled correctly?
 function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, θ::T, ν::N = 1) where {T, N <: Real}
     n = length(y)
     lower = zeros(n)
     for i in 1:n
         μ = X[i,:] ⋅ β
-        if u₁[i] > 0
+        if (u₁[i] > 0) && (y[i] < μ)
             lower[i] = (μ - y[i]) / (α * u₁[i]^(1/θ))
-        else
+        elseif (u₂[i] > 0) && (y[i] >= μ)
             lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
         end
     end
-    rand(Pareto(ν + length(y) - 1, maximum(lower)), 1)[1]
+    rand(Pareto(ν + n - 1, maximum(lower)), 1)[1]
 end
 
 function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
-    n = length(y)
-    θ = range(0.01, 3, length = 1000)
-    θₗ, θᵤ = zeros(n), zeros(n)
-    for i in 1:n
-        if u₁[i] > 0
-            θside = (u₁[i] .^ (1 ./ θ))
-            c = (X[i,:] ⋅ β - y[i]) / (α * σ)
-            ids = findall(θside .> c)
-            θᵤ[i] = length(ids) > 0 ? θ[maximum(ids)] : Inf
-            θₗ[i] = length(ids) > 0 ? θ[minimum(ids)] : 0
-        else
-            θside = (u₂[i] .^ (1 ./ θ))
-            c = (y[i] - X[i,:] ⋅ β) / ((1-α) * σ)
-            ids = findall(θside .> c)
-            θᵤ[i] = length(ids) > 0 ? θ[maximum(ids)] : Inf
-            θₗ[i] = length(ids) > 0 ? θ[minimum(ids)] : 0
-        end
-    end
-    [maximum(θₗ) minimum(θᵤ)]
+
+    id_pos = findall((X*β .- y) .> 0)
+    id_neg = findall((y.-X*β) .> 0)
+    ids1 = id_pos[findall(log.((X[id_pos,:]*β - y[id_pos])./(σ*α)) .< 0)]
+    ids2 = id_pos[findall(log.((X[id_pos,:]*β - y[id_pos])./(σ*α)) .> 0)]
+    ids3 = id_neg[findall(log.((y[id_neg]-X[id_neg,:]*β)./(σ*(1-α))) .< 0)]
+    ids4 = id_neg[findall(log.((y[id_neg]-X[id_neg,:]*β)./(σ*(1-α))) .> 0)]
+
+    l1 = length(ids1) > 0 ? maximum(log.(u₁[ids1])./log.((X[ids1,:]*β - y[ids1])./(α*σ))) : 0
+    l2 = length(ids3) > 0 ? maximum(log.(u₂[ids3])./log.(( y[ids3]-X[ids3,:]*β)./((1-α)*σ))) : 0
+
+    up1 = length(ids2) > 0 ? minimum(log.(u₁[ids2]) ./ log.((X[ids2,:]*β - y[ids2])./(α*σ))) : Inf
+    up2 = length(ids4) > 0 ? minimum(log.(u₂[ids4]) ./log.((y[ids4]-X[ids4,:]*β)./((1-α)*σ))) : Inf
+
+    [maximum([0 l1 l2]) minimum([up1 up2])]
 end
 
 
@@ -69,29 +66,18 @@ function θcond(θ::T, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T) where {T <: 
     n*(1+1/θ) * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - δ(α, θ) * sum(u₁ .+ u₂)
 end
 
-function sampleθ(θ::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+function sampleθ(θ::T, ε::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     interval = θinterval(X, y, u₁, u₂, β, α, σ)
-    if minimum(interval) <= maximum(interval)
-        prop = rand(Uniform(minimum(interval), maximum(interval)), 1)[1]
-        θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
-    else
-        minimum(interval)
-    end
-end
-
-function sampleθ(θ::T, ε::T, interval::Array{T, 2},
-    X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
-    β::Array{T, 1}, α::T, σ::T) where {T <: Real}
-    if minimum(interval) <= maximum(interval)
-        d = truncated(Normal(θ, ε), minimum(interval), maximum(interval))
-        prop = rand(d, 1)[1]
-        gPrev = logpdf(truncated(Normal(prop, ε), minimum(interval), maximum(interval)), θ)
-        gProp = logpdf(d, prop)
-        θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
-    else
-        minimum(interval)
-    end
+    prop = rand(Uniform(interval[1], interval[2]))
+    """
+    d = truncated(Normal(θ, ε), interval[1], interval[2])
+    prop = rand(d, 1)[1]
+    gPrev = logpdf(truncated(Normal(prop, ε), interval[1], interval[2]), θ)
+    gProp = logpdf(d, prop)
+    θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+    """
+    θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
 function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},

@@ -3,52 +3,44 @@ using .QR
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 using Plots, PlotThemes, CSV, DataFrames, StatFiles
 
-##
-n = 2000
-β = [2.1, 0.8]
-α, θ, σ = 0.5, 1., 1.
-x₂ = rand(Uniform(-3, 3), n)
-X = [repeat([1], n) x₂]
-y = X * β .+ rand(Laplace(0, σ), n)
 
-function θintervalNew(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
-    β::Array{T, 1}, α::T, σ::T) where {T <: Real}
-    n = length(y)
-    id_pos = findall((X*β .- y) .> 0)
-    id_neg = findall((y.-X*β) .> 0)
-    ids1 = id_pos[findall(log.((X[id_pos,:]*β - y[id_pos])./(σ*α)) .< 0)]
-    ids2 = id_pos[findall(log.((X[id_pos,:]*β - y[id_pos])./(σ*α)) .> 0)]
-    ids3 = id_neg[findall(log.((y[id_neg]-X[id_neg,:]*β)./(σ*(1-α))) .< 0)]
-    ids4 = id_neg[findall(log.((y[id_neg]-X[id_neg,:]*β)./(σ*(1-α))) .> 0)]
-
-    l1 = maximum(log.(u1[ids1])./log.((X[ids1,:]*β - y[ids1])./(α*σ)))
-    l2 = maximum(log.(u2[ids3])./log.(( y[ids3]-X[ids3,:]*β)./((1-α)*σ)))
-
-    up1 = minimum(log.(u1[ids2]) ./ log.((X[ids2,:]*β - y[ids2])./(α*σ)))
-    up2 = minimum(log.(u2[ids4]) ./log.((y[ids4]-X[ids4,:]*β)./((1-α)*σ)))
-
-    [maximum([0 l1 l2]) minimum([up1 up2])]
+function δ(α::T, θ::T)::T where {T <: Real}
+    2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
 
+function θcond(θ::T, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T) where {T <: Real}
+    n = length(u₁)
+    n*(1+1/θ) * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - δ(α, θ) * sum(u₁ .+ u₂)
+end
+
+##
+n = 100
+β = [2.1, 0.8]
+α, θ, σ = 0.55, 1., 1.
+x₂ = rand(Uniform(-3, 3), n)
+X = [repeat([1], n) x₂]
+y = X * β .+ rand(Normal(0, σ), n)
 
 u1, u2 = sampleLatent(X, y, β, α, θ, σ)
+p = range(0.1, 3, length = 2000)
+plot(p, [θcond(a, u1, u2, α) for a in p])
+# plot!(p, [θcond(a, u1, u2, α) for a in p])
 
-id_pos = findall((X*β .- y) .> 0)
-id_neg = findall((y.-X*β) .> 0)
+n*(1+1/θ) * log(δ(α, θ))
+n*log(gamma(1+1/0.5))
+δ(α, θ) * sum(u1 .+ u1)
 
-ids1 = id_pos[findall(log.((X[id_pos,:]*β - y[id_pos])./(σ*α)) .< 0)]
-ids2 = id_pos[findall(log.((X[id_pos,:]*β - y[id_pos])./(σ*α)) .> 0)]
+## σ
+lower = zeros(n)
+for i in 1:n
+    μ = X[i,:] ⋅ β
+    if (u1[i] > 0) && (y[i] < μ)
+        lower[i] = (μ - y[i]) / (α * u1[i]^(1/θ))
+    elseif (u2[i] > 0) && (y[i] >= μ)
+        lower[i] = (y[i] - μ) / ((1-α) * u2[i]^(1/θ))
+    end
+end
 
-ids3 = id_neg[findall(log.((y[id_neg]-X[id_neg,:]*β)./(σ*(1-α))) .< 0)]
-ids4 = id_neg[findall(log.((y[id_neg]-X[id_neg,:]*β)./(σ*(1-α))) .> 0)]
+maximum(lower)
 
-l1 = maximum(log.(u1[ids1])./log.((X[ids1,:]*β - y[ids1])./(α*σ)))
-l2 = maximum(log.(u2[ids3])./log.(( y[ids3]-X[ids3,:]*β)./((1-α)*σ)))
-maximum([0 l1 l2])
-
-up1 = minimum(log.(u1[ids2]) ./ log.((X[ids2,:]*β - y[ids2])./(α*σ)))
-up2 = minimum(log.(u2[ids4]) ./log.((y[ids4]-X[ids4,:]*β)./((1-α)*σ)))
-minimum([up1 up2])
-
-θinterval(X,y,u1,u2,β,α,σ)
-θintervalNew(X,y,u1,u2,β,α,σ)
+rand(Pareto(n - 1, maximum(lower)), 10000) |> mean

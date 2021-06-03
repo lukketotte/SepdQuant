@@ -80,12 +80,13 @@ function sampleθ(θ::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂
     end
 end
 
-function sampleθ(θ::T, d::ContinuousUnivariateDistribution, interval::Array{T, 2},
+function sampleθ(θ::T, ε::T, interval::Array{T, 2},
     X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     if minimum(interval) <= maximum(interval)
+        d = truncated(Normal(θ, ε), minimum(interval), maximum(interval))
         prop = rand(d, 1)[1]
-        gPrev = logpdf(d, θ)
+        gPrev = logpdf(truncated(Normal(prop, ε), minimum(interval), maximum(interval)), θ)
         gProp = logpdf(d, prop)
         θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
     else

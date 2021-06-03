@@ -2,7 +2,7 @@ include("QR.jl")
 using .QR
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 using Plots, PlotThemes, CSV, DataFrames, StatFiles
-using KernelDensity
+# using KernelDensity
 theme(:juno)
 
 ## tests
@@ -55,9 +55,9 @@ function sampleSigma(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Ar
     lower = zeros(n)
     for i in 1:n
         μ = X[i,:] ⋅ β
-        if u₁[i] > 0
+        if (u₁[i] > 0) && (μ <= y[i])
             lower[i] = (μ - y[i]) / (α * u₁[i]^(1/θ))
-        else
+        elseif (u₂[i] > 0) && (μ >= y[i])
             lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
         end
     end
@@ -87,6 +87,13 @@ function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Arr
     [maximum(θₗ) minimum(θᵤ)]
 end
 
+θcond(1., u1, u2, α)
+
+n*(1+1/.1)*log(δ(α, 1.))
+
+δ(α, 1.) * (sum(u1 + u2))
+n*log(gamma(1+1/1.))
+n*(1+1/1.) * log(δ(α, 1.))
 
 function θcond(θ::T, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T) where {T <: Real}
     n = length(u₁)
@@ -163,23 +170,20 @@ end
 ## MCMC
 
 # generate data
-n = 300
+n = 100
 β = [2.1, 0.8]
 α, θ, σ = 0.5, 2., 1.
 x₂ = rand(Uniform(-3, 3), n)
 X = [repeat([1], n) x₂]
-y = X * β .+ rand(Normal(0, σ), n)
-k = kde(y - X*β)
-x = range(-5, 5, length = 500);
-plot(x, pdf(k, x))
+y = X * β .+ rand(Laplace(0, σ), n)
 
-nMCMC = 20000
+nMCMC = 1000
 σ = zeros(nMCMC)
 σ[1] = 2.
 β = zeros(nMCMC, 2)
 β[1, :] = [2.1, 0.8]
 θ = zeros(nMCMC)
-θ[1] = 2.
+θ[1] = 1.
 
 simU1 = zeros(nMCMC, n)
 simU2 = zeros(nMCMC, n)
@@ -188,22 +192,31 @@ for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
     simU1[i,:] = u1
     simU2[i,:] = u2
-    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
-    σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1)
-    interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
+    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 1000.)
+    # σ[i] = 1.
+    interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i-1])
+    # println(interval)
     if minimum(interval) === maximum(interval)
         θ[i] = interval[1]
     else
-        d = truncated(Normal(θ[i-1], 0.1), minimum(interval), maximum(interval))
-        θ[i] = sampleθ(θ[i-1], d, interval, X, y, u1, u2, β[i, :], α, σ[i])
+        # d = truncated(Normal(θ[i-1], 0.01), minimum(interval), maximum(interval))
+        θ[i] = sampleθ(θ[i-1], 1., interval, X, y, u1, u2, β[i, :], α, σ[i])
     end
+    σ[i] = sampleSigma(X, y, u1, u2, β[i, :], α, θ[i], 1)
 end
 
 plot(β[:, 2])
 plot(σ)
 plot(θ)
 
-autocor(θ, [1,3,10,40])
+
+β[17,:]
+σ[17]
+θ[17]
+
+autocor(θ, [1,3,10,40]) |> println
+
+1-((θ[2:nMCMC] .=== θ[1:(nMCMC - 1)]) |> mean)
 
 plot(cumsum(σ) ./ (1:nMCMC))
 plot(cumsum(β[:, 2]) ./ (1:nMCMC))
@@ -211,6 +224,15 @@ plot(cumsum(θ) ./ (1:nMCMC))
 
 u1, u2 = sampleLatent(X, y, β[nMCMC,:], α, θ[nMCMC], σ[nMCMC])
 θinterval(X, y, u1, u2, β[nMCMC,:], α, σ[nMCMC])
+
+p = range(0.01, 4., length = 200)
+pl = [θcond(a, u1, u2, 0.5)  for a in p]
+plot(p, pl, legend = false)
+
+k = kde(y - X*β)
+x = range(-5, 5, length = 500);
+plot(x, pdf(k, x))
+
 
 """
 CSV.write("beta.csv", DataFrame(β), header = false)

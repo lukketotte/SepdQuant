@@ -1,40 +1,40 @@
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 include("QR.jl")
 using .QR
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 using Plots, PlotThemes #, CSV, DataFrames, StatFiles
 # using KernelDensity
 theme(:juno)
 
 # generate data
-n = 200
-β, α, θ, σ = [2.1, 0.8], 0.5, 2., 1.
+n = 200;
+β, α, θ, σ = [2.1, 0.8], 0.5, 2., 1.;
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
-y = X * β .+ rand(Laplace(0, σ), n)
-√(var(y-X*inv(X'*X)*X'*y))
+y = X * β .+ rand(Normal(0, σ), n);
+# √(var(y-X*inv(X'*X)*X'*y));
 
-nMCMC = 100000
+nMCMC = 50000
 σ = zeros(nMCMC)
 σ[1] = 1.
 β = zeros(nMCMC, 2)
 β[1, :] = [2.1, 0.8]
 θ = zeros(nMCMC)
-θ[1] = 1.
+θ[1] = 2.
 
 for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
-    (i % 5000 === 0) && println(θinterval(X, y, u1, u2, β[i-1,:], α, σ[i-1]))
-    σ[i] = sampleσ(X, y, u1, u2, β[i-1, :], α, θ[i-1], 10)
-    σ[i] = 1.1
-    θ[i] = sampleθ(θ[i-1], 1., X, y, u1, u2, β[i-1, :], α, σ[i])
+    (i % 1 === 0) && println(round.(θinterval(X, y, u1, u2, β[i-1,:], α, σ[i-1]), digits = 3))
+    println(i)
+    σ[i] = sampleσ(X, y, u1, u2, β[i-1, :], α, θ[i-1], 1)
+    θ[i] = sampleθ(θ[i-1], 2., X, y, u1, u2, β[i-1, :], α, σ[i])
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 10.)
 end
 
-plot(β[:, 1])
-plot(σ)
-plot(θ)
-plot!(σ)
+σ[4]
 
-θ[nMCMC]
+plot(β[:, 1])
+plot(σ[1:45])
+plot(θ[1:45])
+plot!(σ)
 
 autocor(θ, [1,3,10,40]) |> println
 
@@ -48,6 +48,8 @@ plot(σ[thin])
 plot(cumsum(σ) ./ (1:nMCMC))
 plot(cumsum(β[:, 2]) ./ (1:nMCMC))
 plot(cumsum(θ) ./ (1:nMCMC))
+median(θ[10000:nMCMC])
+
 
 """
 CSV.write("beta.csv", DataFrame(β), header = false)

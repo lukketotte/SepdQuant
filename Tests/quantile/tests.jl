@@ -6,7 +6,7 @@ using Plots, PlotThemes #, CSV, DataFrames, StatFiles
 theme(:juno)
 
 # generate data
-n = 200;
+n = 100;
 β, α, θ, σ = [2.1, 0.8], 0.5, 2., 1.;
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
 y = X * β .+ rand(Normal(0, σ), n);
@@ -22,18 +22,17 @@ nMCMC = 50000
 
 for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
-    (i % 1 === 0) && println(round.(θinterval(X, y, u1, u2, β[i-1,:], α, σ[i-1]), digits = 3))
-    println(i)
+    (i % 10000 === 0) && println(round.(θinterval(X, y, u1, u2, β[i-1,:], α, σ[i-1]), digits = 3))
     σ[i] = sampleσ(X, y, u1, u2, β[i-1, :], α, θ[i-1], 1)
     θ[i] = sampleθ(θ[i-1], 2., X, y, u1, u2, β[i-1, :], α, σ[i])
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 10.)
 end
 
-σ[4]
+
 
 plot(β[:, 1])
-plot(σ[1:45])
-plot(θ[1:45])
+plot(σ)
+plot(θ)
 plot!(σ)
 
 autocor(θ, [1,3,10,40]) |> println

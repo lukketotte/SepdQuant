@@ -70,6 +70,7 @@ function sampleθ(θ::T, ε::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
     interval = θinterval(X, y, u₁, u₂, β, α, σ)
     prop = rand(Uniform(interval[1], interval[2]))
+
     """
     d = truncated(Normal(θ, ε), interval[1], interval[2])
     prop = rand(d, 1)[1]

@@ -1,71 +1,60 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 include("QR.jl")
-using .QR
+include("..\\aepd.jl")
+using .AEPD, .QR
 using Plots, PlotThemes, Formatting #, CSV, DataFrames, StatFiles
 # using KernelDensity
 theme(:juno)
 
-## Sampling of σ
-
-rand(Pareto(n-1, 0.99), 1000) |> mean
-
-σ[1:1000] |> plot
-plot!(θ[1:1000])
-
-sampleσ(X, y, U1[1000,:], U2[1000,:], β[1000-1, :], α, θ[1000-1], 1)
-
-iter = 1000
-lower = zeros(n)
-for i in 1:n
-    μ = X[i,:] ⋅ β[iter,:]
-    if (U1[iter,i] > 0) && (y[i] < μ)
-        lower[i] = (μ - y[i]) / (α * U1[iter,i]^(1/θ[iter-1]))
-    elseif (U2[iter,i] > 0) && (y[i] >= μ)
-        lower[i] = (y[i] - μ) / ((1-α) * U2[iter,i]^(1/θ[iter-1]))
-    end
-end
-maximum(lower)
-
+## Sampling of θ
+u1, u2 = sampleLatent(X, y, β, α, θ, σ)
+θinterval(X, y, u1, u2, β, α, σ) |> println
 
 
 ##
 
 # generate data
-n = 300;
-β, α, θ, σ = [2.1, 0.8], 0.5, 2., 1.;
+n = 100;
+β, α, θ, σ = [2.1, 0.8], 0.5, 1., 1.;
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
-y = X * β .+ rand(Normal(0, σ), n);
-√(var(y-X*inv(X'*X)*X'*y))
+d = aepd(0., σ, θ, α);
+# d = Laplace(0., 1.)
+y = X * β .+ rand(d, n);
 
-nMCMC = 500000
+nMCMC = 10000
 σ = zeros(nMCMC)
-σ[1] = 1.
+σ[1] = √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
 β = zeros(nMCMC, 2)
-β[1, :] = [2.1, 0.8]
+β[1, :] = inv(X'*X)*X'*y
 θ = zeros(nMCMC)
-θ[1] = 2.5
+θ[1] = 1.
 U1, U2 = zeros(nMCMC, n), zeros(nMCMC, n)
 
 for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
-    U1[i,:] = u1
-    U2[i,:] = u2
-    interval = round.(θinterval(X, y, u1, u2, β[i-1,:], α, σ[i-1]), digits = 3)
-    (i % 10000 === 0) && printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}] \n", i, interval[1], interval[2])
-    σ[i] = sampleσ(X, y, u1, u2, β[i-1, :], α, θ[i-1], 1)
-    θ[i] = sampleθ(θ[i-1], 100., X, y, u1, u2, β[i-1, :], α, σ[i])
-    # θ[i] = 2.
-    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 10.)
+    U1[i,:], U2[i,:] = u1, u2
+    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
+    σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
+    θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+    if i % 1000 === 0
+        interval = round.(θinterval(X, y, u1, u2, β[i,:], α, σ[i]), digits = 3)
+        printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])
+    end
+    # σ[i] = 1.
+    # θ[i] = .2
 end
 
-plot(β[:, 2])
+
+plot(β[:, 1])
 plot(σ)
 plot(θ)
 plot!(σ)
 
+##
+
 autocor(θ, [1,3,10,40]) |> println
 
-thin = ((1:nMCMC) .% 100) .=== 0
+thin = ((1:nMCMC) .% 10) .=== 0
 autocor(θ[thin], [1,3,10,40]) |> println
 plot(θ[thin])
 plot(σ[thin])
@@ -75,7 +64,7 @@ plot(σ[thin])
 plot(cumsum(σ) ./ (1:nMCMC))
 plot(cumsum(β[:, 2]) ./ (1:nMCMC))
 plot(cumsum(θ) ./ (1:nMCMC))
-median(θ[10000:nMCMC])
+median(θ[100000:nMCMC])
 median(θ[thin])
 ##
 plot!(cumsum(σ) ./ (1:nMCMC))

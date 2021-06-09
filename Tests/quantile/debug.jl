@@ -2,7 +2,7 @@ include("QR.jl")
 using .QR
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 using Plots, PlotThemes, CSV, DataFrames, StatFiles
-
+# using KernelDensity
 
 function δ(α::T, θ::T)::T where {T <: Real}
     2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
@@ -44,3 +44,52 @@ end
 maximum(lower)
 
 rand(Pareto(n - 1, maximum(lower)), 10000) |> mean
+
+
+## Truncated gamma following Philippe
+a, t, b = 100, 0.99, 1;
+v, w = zeros(a), zeros(a);
+v[1], w[1] = 1,1;
+for k in 2:a
+    v[k] = v[k-1] * (a-k+1)/(t*b)
+    w[k] = w[k-1] + v[k]
+end
+
+wt = v./w[a]
+
+any(wt .>= u)
+
+n = 1000
+x = zeros(n)
+for i in 1:n
+    u = rand(Uniform(), 1)[1]
+    k = any(wt .>= u) ? minimum(findall(wt .>= u)) : a
+    x[i] = t * (rand(InverseGamma(k, 1/(t*b)), 1)[1] + 1)
+end
+
+mean(x)
+x
+
+d = kde(x);
+a = range(t, 1.2, length = 1000)
+plot(pdf(d, a));
+
+function rtruncGamma(n::N, a::N, b::T, t::T) where {N, T <: Real}
+    a, t, b = 100, 0.99, 1;
+    v, w = zeros(a), zeros(a);
+    v[1], w[1] = 1,1;
+    for k in 2:a
+        v[k] = v[k-1] * (a-k+1)/(t*b)
+        w[k] = w[k-1] + v[k]
+    end
+    wt = v./w[a]
+    x = zeros(n)
+    for i in 1:n
+        u = rand(Uniform(), 1)[1]
+        k = any(wt .>= u) ? minimum(findall(wt .>= u)) : a
+        x[i] = t * (rand(InverseGamma(k, 1/(t*b)), 1)[1] + 1)
+    end
+    x
+end
+
+rtruncGamma(1, 100, 1., 0.98)[1]

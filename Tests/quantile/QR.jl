@@ -55,7 +55,7 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
             lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
         end
     end
-    #rand(Pareto(ν + n - 1, maximum(lower)), 1)[1]
+    # rand(Pareto(a + n - 1, maximum(lower)), 1)[1]
     rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
 end
 

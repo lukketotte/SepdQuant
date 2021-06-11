@@ -8,13 +8,14 @@ theme(:juno)
 
 ## Sampling of θ
 u1, u2 = sampleLatent(X, y, β, α, θ, σ)
-θinterval(X, y, u1, u2, β, α, σ) |> println
-
+# θinterval(X, y, u1, u2, β, α, σ) |> println
+β = sampleβ(X, y, u1, u2, β, α, θ, σ, 10.)
+σ = sampleσ(X, y, u1, u2, β, α, θ, 1, 1.)
 
 ##
 
 # generate data
-n = 300;
+n = 10000;
 β, α, σ = [2.1, 0.8], 0.5, 1.;
 θ = 1.
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
@@ -22,7 +23,7 @@ d = aepd(0., σ, θ, α);
 # d = Laplace(0., 1.)
 y = X * β .+ rand(d, n);
 
-nMCMC = 200000
+nMCMC = 20000
 σ = zeros(nMCMC)
 σ[1] = 1 # √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
 β = zeros(nMCMC, 2)
@@ -36,21 +37,24 @@ for i in 2:nMCMC
     U1[i,:], U2[i,:] = u1, u2
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
     # β[i,:] = [2.1, 0.8]
-    # σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
-    # θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+    #σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
+    #θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
     if i % 5000 === 0
-        interval = round.(θinterval(X, y, u1, u2, β[i,:], α, σ[i]), digits = 3)
+        interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
         printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])
     end
     σ[i] = 1.
     θ[i] = 1.
 end
 
-
+# β and σ are drifting
 plot(β[:, 1])
 plot(σ[1:nMCMC])
 plot(θ[1:nMCMC])
 plot!(σ)
+
+## Tests of output
+σ[2]
 
 ##
 

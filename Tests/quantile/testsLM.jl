@@ -13,10 +13,30 @@ u1, u2 = sampleLatent(X, y, β, α, θ, σ)
 σ = sampleσ(X, y, u1, u2, β, α, θ, 1, 1.)
 # θ = sampleθ(θ, .1, X, y, u1, u2, [2.1, 0.8], α, σ)
 
+## Testing different way of writing interval
+u1, u2 = sampleLatent(X, y, β, α, θ, σ)
+k = 1
+l, u = [], []
+
+for i ∈ 1:n
+    μ = X[i, 1:end .!= k] ⋅  β[1:end .!= k]
+    if X[i,k] > 0
+        append!(l, (y[i]-μ-(1-α)*σ*u2[i]^(1/θ))/X[i,k])
+        append!(u, (y[i]-μ+ α*σ*u2[i]^(1/θ))/X[i,k])
+    elseif X[i, k] < 0
+        append!(l, (μ - y[i] - α*σ*u1[i]^(1/θ))/(-X[i,k]))
+        append!(u, (μ - y[i] + (1-α)*u2[i]^(1/θ))/(-X[i,k]))
+    end
+end
+
+maximum(l)
+minimum(u[findall(u .>= maximum(l))])
+
+
 ##
 
 # generate data
-n = 100;
+n = 10000;
 β, α, σ = [2.1, 0.8], 0.5, 3.;
 θ = 1.
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]

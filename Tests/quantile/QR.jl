@@ -1,6 +1,6 @@
 module QR
 
-export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval
+export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval, sampleμ
 
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
 
@@ -25,6 +25,22 @@ function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ
     u₁, u₂
 end
 
+function sampleLatent(y::Array{T, 1}, μ::T, α::T, θ::T, σ::T) where {T <: Real}
+    n = length(y)
+    u₁, u₂ = zeros(n), zeros(n)
+    for i in 1:n
+        if y[i] <= μ
+            l = ((μ - y[i]) / (σ * α))^θ
+            u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
+        else
+            l = ((y[i] - μ) / (σ * (1-α)))^θ
+            u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
+        end
+    end
+    u₁, u₂
+end
+
+## TODO: using this basically seems to push the scale down to 1
 function rtruncGamma(n::N, a::N, b::T, t::T) where {N, T <: Real}
     v, w = zeros(a), zeros(a);
     v[1], w[1] = 1,1;
@@ -42,7 +58,6 @@ function rtruncGamma(n::N, a::N, b::T, t::T) where {N, T <: Real}
     x
 end
 
-# TODO: is this sampled correctly?
 function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, θ::T, a::N = 1, b::T = 1.) where {T, N <: Real}
     n = length(y)
@@ -55,8 +70,23 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
             lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
         end
     end
-    # rand(Pareto(a + n - 1, maximum(lower)), 1)[1]
-    rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
+    # rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
+    rand(Pareto(a + n - 1, maximum(lower)), 1)[1]
+end
+
+function sampleσ(y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+    μ::T, α::T, θ::T, a::N = 1, b::T = 1.) where {T, N <: Real}
+    n = length(y)
+    lower = zeros(n)
+    for i in 1:n
+        if (u₁[i] > 0) && (y[i] < μ)
+            lower[i] = (μ - y[i]) / (α * u₁[i]^(1/θ))
+        elseif (u₂[i] > 0) && (y[i] >= μ)
+            lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
+        end
+    end
+    # rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
+    rand(Pareto(a + n - 1, maximum(lower)), 1)[1]
 end
 
 function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
@@ -78,6 +108,25 @@ function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Arr
     [maximum([0 l1 l2]) minimum([up1 up2])]
 end
 
+function θinterval(y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+    μ::T, α::T, σ::T) where {T <: Real}
+
+    id_pos = findall(((μ .- y) .> 0) .& (u₁ .> 0))
+    id_neg = findall(((y .- μ) .> 0) .& (u₂ .> 0))
+    ids1 = id_pos[findall(log.((μ .- y[id_pos])./(σ*α)) .< 0)]
+    ids2 = id_pos[findall(log.((μ .- y[id_pos])./(σ*α)) .> 0)]
+    ids3 = id_neg[findall(log.((y[id_neg].-μ)./(σ*(1-α))) .< 0)]
+    ids4 = id_neg[findall(log.((y[id_neg].-μ)./(σ*(1-α))) .> 0)]
+
+    l1 = length(ids1) > 0 ? maximum(log.(u₁[ids1])./log.((μ .- y[ids1])./(α*σ))) : 0
+    l2 = length(ids3) > 0 ? maximum(log.(u₂[ids3])./log.(( y[ids3] .- μ)./((1-α)*σ))) : 0
+
+    up1 = length(ids2) > 0 ? minimum(log.(u₁[ids2]) ./ log.((μ .- y[ids2])./(α*σ))) : Inf
+    up2 = length(ids4) > 0 ? minimum(log.(u₂[ids4]) ./log.((y[ids4] .- μ)./((1-α)*σ))) : Inf
+
+    [maximum([0 l1 l2]) minimum([up1 up2])]
+end
+
 
 function θcond(θ::T, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T) where {T <: Real}
     n = length(u₁)
@@ -94,6 +143,14 @@ function sampleθ(θ::T, ε::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1
     gProp = logpdf(d, prop)
     θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) + gPrev - gProp >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ"""
 
+    prop = rand(Uniform(minimum(interval), maximum(interval)))
+    θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+end
+
+
+function sampleθ(θ::T, ε::T,  y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
+    μ::T, α::T, σ::T) where {T <: Real}
+    interval = θinterval(y, u₁, u₂, μ, α, σ)
     prop = rand(Uniform(minimum(interval), maximum(interval)))
     θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
@@ -125,4 +182,20 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
     βsim
 end
 
+function sampleμ(y::Array{T,1}, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
+    n = length(y)
+    l, u = [], []
+    for i ∈ 1:n
+        if u₁[i] > 0
+            append!(u, y[i] + α*σ*u₁[i]^(1/θ))
+        elseif u₂[i] > 0
+            append!(l, y[i] - (1-α)*σ*u₂[i]^(1/θ))
+        end
+    end
+    length(l) == 0. && append!(l, -Inf)
+    length(u) == 0. && append!(u, Inf)
+    maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : maximum(l)
+end
+
+# module
 end

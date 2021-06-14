@@ -11,40 +11,42 @@ u1, u2 = sampleLatent(X, y, β, α, θ, σ)
 # θinterval(X, y, u1, u2, β, α, σ) |> println
 β = sampleβ(X, y, u1, u2, β, α, θ, σ, 10.)
 σ = sampleσ(X, y, u1, u2, β, α, θ, 1, 1.)
+# θ = sampleθ(θ, .1, X, y, u1, u2, [2.1, 0.8], α, σ)
 
 ##
 
 # generate data
-n = 10000;
-β, α, σ = [2.1, 0.8], 0.5, 1.;
+n = 100;
+β, α, σ = [2.1, 0.8], 0.5, 3.;
 θ = 1.
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
 d = aepd(0., σ, θ, α);
 # d = Laplace(0., 1.)
 y = X * β .+ rand(d, n);
 
-nMCMC = 20000
+nMCMC = 1000
 σ = zeros(nMCMC)
-σ[1] = 1 # √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+σ[1] = √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
 β = zeros(nMCMC, 2)
 β[1, :] = inv(X'*X)*X'*y
 θ = zeros(nMCMC)
 θ[1] = 1.
 U1, U2 = zeros(nMCMC, n), zeros(nMCMC, n)
 
+# TODO: why is σ so high even when treating θ as known?
 for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
     U1[i,:], U2[i,:] = u1, u2
-    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 10.)
+    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 100.)
     # β[i,:] = [2.1, 0.8]
-    #σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
-    #θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+    σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
+    # σ[i] = 8.
+    # θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+    θ[i] = 1.
     if i % 5000 === 0
         interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
         printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])
     end
-    σ[i] = 1.
-    θ[i] = 1.
 end
 
 # β and σ are drifting
@@ -54,8 +56,17 @@ plot(θ[1:nMCMC])
 plot!(σ)
 
 ## Tests of output
-σ[2]
+median(β[5000:nMCMC, 1])
+inv(X'*X)*X'*y
 
+√(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+
+β[761,:]
+U1[761,:] |> mean
+U2[761,:] |> mean
+
+
+sampleσ(X, y, U1[761,:], U2[761,:], β[761, :], α, 1., 1, 1.)
 ##
 
 autocor(θ, [1,3,10,40]) |> println

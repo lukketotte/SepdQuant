@@ -11,42 +11,59 @@ u1, u2 = sampleLatent(X, y, β, α, θ, σ)
 # θinterval(X, y, u1, u2, β, α, σ) |> println
 β = sampleβ(X, y, u1, u2, β, α, θ, σ, 10.)
 σ = sampleσ(X, y, u1, u2, β, α, θ, 1, 1.)
+println(β,", ", σ)
 # θ = sampleθ(θ, .1, X, y, u1, u2, [2.1, 0.8], α, σ)
 
-## Testing different way of writing interval
-u1, u2 = sampleLatent(X, y, β, α, θ, σ)
+## Testing different way of writing lm coefficient interval
+u1, u2 = sampleLatent(X, y, β, α, θ, √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2)))
 k = 1
 l, u = [], []
 
 for i ∈ 1:n
     μ = X[i, 1:end .!= k] ⋅  β[1:end .!= k]
     if X[i,k] > 0
-        append!(l, (y[i]-μ-(1-α)*σ*u2[i]^(1/θ))/X[i,k])
-        append!(u, (y[i]-μ+ α*σ*u2[i]^(1/θ))/X[i,k])
+        u2[i] > 0 && append!(l, (y[i]-μ-(1-α)*σ*u2[i]^(1/θ))/X[i,k])
+        u1[i] > 0 && append!(u, (y[i]-μ+ α*σ*u1[i]^(1/θ))/X[i,k])
     elseif X[i, k] < 0
-        append!(l, (μ - y[i] - α*σ*u1[i]^(1/θ))/(-X[i,k]))
-        append!(u, (μ - y[i] + (1-α)*u2[i]^(1/θ))/(-X[i,k]))
+        u1[i] > 0 && append!(l, (μ - y[i] - α*σ*u1[i]^(1/θ))/(-X[i,k]))
+        u2[i] > 0 && append!(u, (μ - y[i] + (1-α)*u2[i]^(1/θ))/(-X[i,k]))
+    end
+end
+
+maximum(l) < minimum(u[findall(u .>= maximum(l))])
+
+# other way
+l, u = [], []
+for i in 1:n
+    a = (y[i] - X[i, 1:end .!= k] ⋅  β[1:end .!= k]) / X[i, k]
+    b₁ = α*σ*(u1[i]^(1/θ)) / X[i, k]
+    b₂ = (1-α)*σ*(u2[i]^(1/θ)) / X[i, k]
+    if (u1[i] > 0) && (X[i, k] < 0)
+        append!(l, a + b₁)
+    elseif (u2[i] > 0) && (X[i, k] > 0)
+        append!(l, a - b₂)
+    elseif (u1[i] > 0) && (X[i, k] > 0)
+        append!(u, a + b₁)
+    elseif (u2[i] > 0) && (X[i, k] < 0)
+        append!(u, a - b₂)
     end
 end
 
 maximum(l)
-minimum(u[findall(u .>= maximum(l))])
-
+minimum(u)
 
 ##
 
 # generate data
-n = 10000;
-β, α, σ = [2.1, 0.8], 0.5, 3.;
+n = 500;
+β, α, σ = [2.1, 0.8], 0.5, 0.5;
 θ = 1.
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
-d = aepd(0., σ, θ, α);
-# d = Laplace(0., 1.)
-y = X * β .+ rand(d, n);
+y = X * β .+ rand(aepd(0., σ, θ, α), n);
 
-nMCMC = 1000
+nMCMC = 20000
 σ = zeros(nMCMC)
-σ[1] = √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+σ[1] = 3# √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
 β = zeros(nMCMC, 2)
 β[1, :] = inv(X'*X)*X'*y
 θ = zeros(nMCMC)
@@ -60,7 +77,7 @@ for i in 2:nMCMC
     β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 100.)
     # β[i,:] = [2.1, 0.8]
     σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
-    # σ[i] = 8.
+    # σ[i] = 3.
     # θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
     θ[i] = 1.
     if i % 5000 === 0
@@ -69,24 +86,16 @@ for i in 2:nMCMC
     end
 end
 
-# β and σ are drifting
-plot(β[:, 1])
-plot(σ[1:nMCMC])
-plot(θ[1:nMCMC])
+plot(β[:, 2])
+plot(σ)
+plot(θ)
 plot!(σ)
 
+
 ## Tests of output
-median(β[5000:nMCMC, 1])
-inv(X'*X)*X'*y
-
-√(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
-
-β[761,:]
-U1[761,:] |> mean
-U2[761,:] |> mean
-
-
-sampleσ(X, y, U1[761,:], U2[761,:], β[761, :], α, 1., 1, 1.)
+id = 88
+sampleσ(X, y, U1[id,:], U2[id,:], β[id, :], α, 1., 1, 1.)
+sampleβ(X, y, U1[id,:], U2[id,:], β[760,:], α, θ[760], σ[760], 100.)
 ##
 
 autocor(θ, [1,3,10,40]) |> println

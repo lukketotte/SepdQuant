@@ -12,13 +12,13 @@ function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ
     n,_ = size(X)
     u₁ = zeros(n)
     u₂ = zeros(n)
-    for i in 1:n
-        μ = X[i,:] ⋅ β
-        if y[i] <= μ
-            l = ((μ - y[i]) / (σ * α))^θ
+    μ = X*β
+    for i ∈ 1:n
+        if y[i] <= μ[i]
+            l = ((μ[i] - y[i]) / (σ * α))^θ
             u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         else
-            l = ((y[i] - μ) / (σ * (1-α)))^θ
+            l = ((y[i] - μ[i]) / (σ * (1-α)))^θ
             u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         end
     end
@@ -28,7 +28,7 @@ end
 function sampleLatent(y::Array{T, 1}, μ::T, α::T, θ::T, σ::T) where {T <: Real}
     n = length(y)
     u₁, u₂ = zeros(n), zeros(n)
-    for i in 1:n
+    for i ∈ 1:n
         if y[i] <= μ
             l = ((μ - y[i]) / (σ * α))^θ
             u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
@@ -62,12 +62,12 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
     β::Array{T, 1}, α::T, θ::T, a::N = 1, b::T = 1.) where {T, N <: Real}
     n = length(y)
     lower = zeros(n)
-    for i in 1:n
-        μ = X[i,:] ⋅ β
-        if (u₁[i] > 0) && (y[i] < μ)
-            lower[i] = (μ - y[i]) / (α * u₁[i]^(1/θ))
-        elseif (u₂[i] > 0) && (y[i] >= μ)
-            lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
+    μ = X * β
+    for i ∈ 1:n
+        if (u₁[i] > 0) && (y[i] < μ[i])
+            lower[i] = (μ[i] - y[i]) / (α * u₁[i]^(1/θ))
+        elseif (u₂[i] > 0) && (y[i] >= μ[i])
+            lower[i] = (y[i] - μ[i]) / ((1-α) * u₂[i]^(1/θ))
         end
     end
     # rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
@@ -158,28 +158,24 @@ end
 function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
     n, p = size(X)
-    βsim = zeros(p)
-    for k in 1:p
+    βₛ = zeros(p)
+    for k ∈ 1:p
         l, u = [], []
-        for i in 1:n
-            a = (y[i] - X[i, 1:end .!= k] ⋅  β[1:end .!= k]) / X[i, k]
-            b₁ = α*σ*(u₁[i]^(1/θ)) / X[i, k]
-            b₂ = (1-α)*σ*(u₂[i]^(1/θ)) / X[i, k]
-            if (u₁[i] > 0) && (X[i, k] < 0)
-                append!(l, a + b₁)
-            elseif (u₂[i] > 0) && (X[i, k] > 0)
-                append!(l, a - b₂)
-            elseif (u₁[i] > 0) && (X[i, k] > 0)
-                append!(u, a + b₁)
-            elseif (u₂[i] > 0) && (X[i, k] < 0)
-                append!(u, a - b₂)
+        for i ∈ 1:n
+            μ = X[i, 1:end .!= k] ⋅  β[1:end .!= k]
+            if X[i,k] > 0
+                u₂[i] > 0 && append!(l, (y[i]-μ-(1-α)*σ*u₂[i]^(1/θ))/X[i,k])
+                u₁[i] > 0 && append!(u, (y[i]-μ+ α*σ*u₁[i]^(1/θ))/X[i,k])
+            elseif X[i, k] < 0
+                u₁[i] > 0 && append!(l, (μ - y[i] - α*σ*u₁[i]^(1/θ))/(-X[i,k]))
+                u₂[i] > 0 && append!(u, (μ - y[i] + (1-α)*σ*u₂[i]^(1/θ))/(-X[i,k]))
             end
         end
         length(l) == 0. && append!(l, -Inf)
         length(u) == 0. && append!(u, Inf)
-        βsim[k] = maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : maximum(l)
+        βₛ[k] = rand(truncated(Normal(0, τ), maximum(l), minimum(u[findall(u .>= maximum(l))])), 1)[1]# maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : β[k]
     end
-    βsim
+    βₛ
 end
 
 function sampleμ(y::Array{T,1}, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}

@@ -6,9 +6,9 @@ using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles
 # using KernelDensity
 theme(:juno)
 
-n = 5000;
-μ, α, σ = 2.2, 0.5, 3.;
-θ = 1.
+n = 10000;
+μ, α, σ = 2.2, 0.5, 5.3;
+θ = 1.3
 y = rand(aepd(μ, σ, θ, α), n);
 
 u1, u2 = sampleLatent(y, μ, α, θ, σ)
@@ -22,9 +22,9 @@ nMCMC = 20000
 μ = zeros(nMCMC)
 μ[1] = mean(y)
 σ = zeros(nMCMC)
-σ[1] = 3# √var(y)
+σ[1] = 5.3# √var(y)
 θ = zeros(nMCMC)
-θ[1] = 1.
+θ[1] = 1.3
 U1, U2 = zeros(nMCMC, n), zeros(nMCMC, n)
 
 for i in 2:nMCMC

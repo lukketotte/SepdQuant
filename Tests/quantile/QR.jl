@@ -66,6 +66,7 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
         if (u₁[i] > 0) && (y[i] < μ[i])
             lower[i] = (μ[i] - y[i]) / (α * u₁[i]^(1/θ))
         elseif (u₂[i] > 0) && (y[i] >= μ[i])
+            # TODO: gives really big values for sigma
             lower[i] = (y[i] - μ[i]) / ((1-α) * u₂[i]^(1/θ))
         end
     end
@@ -171,7 +172,7 @@ function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
         end
         length(l) == 0. && append!(l, -Inf)
         length(u) == 0. && append!(u, Inf)
-        βₛ[k] = rand(truncated(Normal(0, τ), maximum(l), minimum(u[findall(u .>= maximum(l))])), 1)[1]# maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : β[k]
+        βₛ[k] = rand(truncated(Normal(0, τ), maximum(l), minimum(u[findall(u .>= maximum(l))])), 1)[1]
     end
     βₛ
 end
@@ -191,10 +192,11 @@ function sampleμ(y::Array{T,1}, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T, θ
     maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : maximum(l)
 end
 
-function mcmc(y::Array{T, 1}, X::Array{T, 2}, α::T, nMCMC::N; θinit::T = 1., printIter::N = 5000) where {T <: Real, N <: Integer}
+function mcmc(y::Array{T, 1}, X::Array{T, 2}, α::T, nMCMC::N;
+    θinit::T = 1., σinit::T = 1., printIter::N = 5000) where {T <: Real, N <: Integer}
     n = length(y)
     σ, σₗ, θ = zeros(nMCMC), zeros(nMCMC), zeros(nMCMC)
-    σ[1] = √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+    σ[1] = σinit
     β = zeros(nMCMC, 2)
     β[1, :] = inv(X'*X)*X'*y
     θ[1] = θinit

@@ -6,10 +6,19 @@ using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles
 # using KernelDensity
 theme(:juno)
 
-n = 10000;
-μ, α, σ = 2.2, 0.5, 5.3;
-θ = 1.3
+n = 1500;
+μ, α, σ = 2.2, 0.5, 2;
+θ = 1
 y = rand(aepd(μ, σ, θ, α), n);
+
+μ,σ,l,θ = mcmc(y, 0.5, 200000)
+
+plot(σ, label="σ")
+# plot!(l)
+plot!(μ, label="μ")
+plot!(θ, label="θ")
+
+##
 
 u1, u2 = sampleLatent(y, μ, α, θ, σ)
 μ = sampleμ(y, u1, u2, α, θ, σ, 100.)
@@ -18,7 +27,7 @@ mean(u1)
 mean(u2)
 
 
-nMCMC = 20000
+nMCMC = 100000
 μ = zeros(nMCMC)
 μ[1] = mean(y)
 σ = zeros(nMCMC)

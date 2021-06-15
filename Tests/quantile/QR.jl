@@ -1,8 +1,8 @@
 module QR
 
-export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval, sampleμ
+export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval, sampleμ, mcmc
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting
 
 function δ(α::T, θ::T)::T where {T <: Real}
     2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
@@ -10,8 +10,7 @@ end
 
 function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T, σ::T) where {T <: Real}
     n,_ = size(X)
-    u₁ = zeros(n)
-    u₂ = zeros(n)
+    u₁, u₂ = zeros(n), zeros(n)
     μ = X*β
     for i ∈ 1:n
         if y[i] <= μ[i]
@@ -70,23 +69,22 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
             lower[i] = (y[i] - μ[i]) / ((1-α) * u₂[i]^(1/θ))
         end
     end
-    # rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
-    rand(Pareto(a + n - 1, maximum(lower)), 1)[1]
+    rand(Pareto(a + n - 1, maximum(lower)), 1)[1], maximum(lower)
 end
 
 function sampleσ(y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     μ::T, α::T, θ::T, a::N = 1, b::T = 1.) where {T, N <: Real}
     n = length(y)
     lower = zeros(n)
-    for i in 1:n
+    for i ∈ 1:n
         if (u₁[i] > 0) && (y[i] < μ)
             lower[i] = (μ - y[i]) / (α * u₁[i]^(1/θ))
         elseif (u₂[i] > 0) && (y[i] >= μ)
             lower[i] = (y[i] - μ) / ((1-α) * u₂[i]^(1/θ))
         end
     end
-    # rtruncGamma(1, a + n - 1, b, maximum(lower))[1]
-    rand(Pareto(a + n - 1, maximum(lower)), 1)[1]
+    # rtruncGamma(1, a + n - 1, b, maximum(lower))[1], maximum(lower)
+    rand(Pareto(a + n - 1, maximum(lower)), 1)[1], maximum(lower)
 end
 
 function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
@@ -191,6 +189,47 @@ function sampleμ(y::Array{T,1}, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T, θ
     length(l) == 0. && append!(l, -Inf)
     length(u) == 0. && append!(u, Inf)
     maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : maximum(l)
+end
+
+function mcmc(y::Array{T, 1}, X::Array{T, 2}, α::T, nMCMC::N; θinit::T = 1., printIter::N = 5000) where {T <: Real, N <: Integer}
+    n = length(y)
+    σ, σₗ, θ = zeros(nMCMC), zeros(nMCMC), zeros(nMCMC)
+    σ[1] = √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+    β = zeros(nMCMC, 2)
+    β[1, :] = inv(X'*X)*X'*y
+    θ[1] = θinit
+
+    for i ∈ 2:nMCMC
+        u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
+        β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 100.)
+        σ[i], σₗ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
+        θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+        if i % printIter === 0
+            interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
+            printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])
+        end
+    end
+    β, σ, σₗ, θ
+end
+
+function mcmc(y::Array{T, 1}, α::T, nMCMC::N; θinit::T = 1., printIter::N = 5000) where {T <: Real, N <: Integer}
+    n = length(y)
+    σ, μ, θ, σₗ = zeros(nMCMC), zeros(nMCMC), zeros(nMCMC), zeros(nMCMC)
+    σ[1] = √var(y)
+    μ[1] = mean(y)
+    θ[1] = θinit
+
+    for i ∈ 2:nMCMC
+        u1, u2 = sampleLatent(y, μ[i-1], α, θ[i-1], σ[i-1])
+        μ[i] = sampleμ(y, u1, u2, α, θ[i-1], σ[i-1], 100.)
+        σ[i], σₗ[i] = sampleσ(y, u1, u2, μ[i], α, θ[i-1], 1, 1.)
+        θ[i] = sampleθ(θ[i-1], .1, y, u1, u2, μ[i], α, σ[i])
+        if i % 5000 === 0
+            interval = θinterval(y, u1, u2, μ[i], α, σ[i])
+            printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])
+        end
+    end
+    μ, σ, σₗ, θ
 end
 
 # module

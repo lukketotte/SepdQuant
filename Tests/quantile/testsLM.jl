@@ -3,7 +3,7 @@ include("QR.jl")
 include("../aepd.jl")
 using .AEPD, .QR
 using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles
-# using KernelDensity
+using KernelDensity
 theme(:juno)
 
 ## Sampling of θ
@@ -14,56 +14,41 @@ u1, u2 = sampleLatent(X, y, β, α, θ, σ)
 println(β,", ", σ)
 # θ = sampleθ(θ, .1, X, y, u1, u2, [2.1, 0.8], α, σ)
 
-## Testing different way of writing lm coefficient interval
-u1, u2 = sampleLatent(X, y, β, α, θ, √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2)))
-k = 1
-l, u = [], []
+## See if it's the same data
+dat = CSV.File("Tests/data/ais.csv") |> DataFrame
+dat = dat[dat.sex .=== "m", :]
 
-for i ∈ 1:n
-    μ = X[i, 1:end .!= k] ⋅  β[1:end .!= k]
-    if X[i,k] > 0
-        u2[i] > 0 && append!(l, (y[i]-μ-(1-α)*σ*u2[i]^(1/θ))/X[i,k])
-        u1[i] > 0 && append!(u, (y[i]-μ+ α*σ*u1[i]^(1/θ))/X[i,k])
-    elseif X[i, k] < 0
-        u1[i] > 0 && append!(l, (μ - y[i] - α*σ*u1[i]^(1/θ))/(-X[i,k]))
-        u2[i] > 0 && append!(u, (μ - y[i] + (1-α)*u2[i]^(1/θ))/(-X[i,k]))
-    end
-end
+y = dat[:,:lbm]
+X = [dat[:,:ht] dat[:,:wt]]
+n, α = length(y), 0.5
+inv(X'*X)*X'*y
 
-maximum(l) < minimum(u[findall(u .>= maximum(l))])
-
-# other way
-l, u = [], []
-for i in 1:n
-    a = (y[i] - X[i, 1:end .!= k] ⋅  β[1:end .!= k]) / X[i, k]
-    b₁ = α*σ*(u1[i]^(1/θ)) / X[i, k]
-    b₂ = (1-α)*σ*(u2[i]^(1/θ)) / X[i, k]
-    if (u1[i] > 0) && (X[i, k] < 0)
-        append!(l, a + b₁)
-    elseif (u2[i] > 0) && (X[i, k] > 0)
-        append!(l, a - b₂)
-    elseif (u1[i] > 0) && (X[i, k] > 0)
-        append!(u, a + b₁)
-    elseif (u2[i] > 0) && (X[i, k] < 0)
-        append!(u, a - b₂)
-    end
-end
-
-maximum(l)
-minimum(u)
 
 ##
 
 # generate data
 n = 500;
-β, α, σ = [2.1, 0.8], 0.5, 0.5;
+β, α, σ = [2.1, 0.8], 0.5, 2;
 θ = 1.
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
 y = X * β .+ rand(aepd(0., σ, θ, α), n);
 
-nMCMC = 20000
+β,σ,l,θ = mcmc(y, X, 0.5, 5000)
+
+plot(β[:, 1], label="β")
+plot(σ, label="σ")
+# plot!(l[1:1000])
+plot(θ, label="θ")
+
+plot(l[2:1000])
+
+√(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+
+##
+
+nMCMC = 50000
 σ = zeros(nMCMC)
-σ[1] = 3# √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
+σ[1] = 2.# √(sum((y-X*inv(X'*X)*X'*y).^2) / (n-2))
 β = zeros(nMCMC, 2)
 β[1, :] = inv(X'*X)*X'*y
 θ = zeros(nMCMC)
@@ -74,23 +59,42 @@ U1, U2 = zeros(nMCMC, n), zeros(nMCMC, n)
 for i in 2:nMCMC
     u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
     U1[i,:], U2[i,:] = u1, u2
-    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 100.)
-    # β[i,:] = [2.1, 0.8]
-    σ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
+    # β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i-1], 100.)
+    β[i,:] = [2.1, 0.8]
+    β[i,1] = rand(Normal(2.1, 0.001), 1)[1]
+    β[i,2] = rand(Normal(0.8, 0.001), 1)[1]
+    σ[i],_ = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
     # σ[i] = 3.
-    # θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
-    θ[i] = 1.
+    θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+    # θ[i] = 1.
     if i % 5000 === 0
         interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
         printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])
     end
 end
 
-plot(β[:, 2])
+plot(β[:, 1])
 plot(σ)
 plot(θ)
 plot!(σ)
 
+## Do not get the same lower bound here
+σ[2]
+i = 2
+# TODO: much higher variance than...
+u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
+sampleσ(X, y, u1, u2, [2.1, 0.8], α, θ[i-1], 1, 1.) |> println
+# TODO: ...this
+lower = zeros(n)
+μ = X * [2.1, 0.8]
+for j ∈ 1:n
+    if (u1[j] > 0) && (y[j] < μ[j])
+        lower[j] = (μ[j] - y[j]) / (α * u1[j]^(1/θ[i-1]))
+    elseif (u2[j] > 0) && (y[j] >= μ[j])
+        lower[i] = (y[j] - μ[j]) / ((1-α) * u2[j]^(1/θ[i-1]))
+    end
+end
+maximum(lower)
 
 ## Tests of output
 id = 88

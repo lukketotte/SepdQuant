@@ -13,23 +13,15 @@ n = 500;
 X = [repeat([1], n) rand(Uniform(-3, 3), n)]
 y = X * β .+ rand(aepd(0., σ, θ, α), n);
 
-nMCMC = 5000
-β = zeros(nMCMC, 2)
-β[1,:] = [2.1, 0.8]
-σ = zeros(nMCMC)
-σ[1] = 2.
-θ = zeros(nMCMC)
-θ[1] = 1.
+u1, u2 = sampleLatent(X, y, β, α, θ, σ)
+βsim = [rand(Normal(2.1, 0.05), 1)[1],rand(Normal(0.8, 0.05), 1)[1]]
+println(βsim)
+sampleσ(X, y, u1, u2, βsim, α, θ, 1, 1.)
 
-for i ∈ 2:nMCMC
-    u₁, u₂ = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i-1])
-    β[i,:] = sampleβ(X, y, u₁, u₂, β[i-1,:], α, θ[i-1], σ[i-1], 100.)
-    σ[i], _ = sampleσ(X, y, u₂, u₂, β[i,:], α, θ[i-1], 1, 1.)
-    θ[i] = sampleθ(θ[i-1], .1, X, y, u₁, u₂, β[i, :], α, σ[i])
-end
+n = 500;
+μ, α, σ = 2.2, 0.5, 2.;
+θ = 1.
+y = rand(aepd(μ, σ, θ, α), n);
 
-plot(σ)
-plot(cumsum(σ)./(1:nMCMC))
-median(σ)
-plot(β[:, 1])
-plot(θ)
+u1, u2 = sampleLatent(y, μ, α, θ, σ)
+sampleσ(y, u1, u2, rand(Normal(2.2, 0.05), 1)[1], α, θ, 1, 1.)

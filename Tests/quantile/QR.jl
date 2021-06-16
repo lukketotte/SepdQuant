@@ -70,7 +70,8 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array
             lower[i] = (y[i] - μ[i]) / ((1-α) * u₂[i]^(1/θ))
         end
     end
-    rand(Pareto(a + n - 1, maximum(lower)), 1)[1], maximum(lower)
+    # rand(Pareto(a + n - 1, maximum(lower)), 1)[1], maximum(lower)
+     rtruncGamma(1, a + n - 1, b, maximum(lower))[1], maximum(lower)
 end
 
 function sampleσ(y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
@@ -157,24 +158,26 @@ end
 function sampleβ(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
     n, p = size(X)
-    βₛ = zeros(p)
-    for k ∈ 1:p
-        l, u = [], []
-        for i ∈ 1:n
-            μ = X[i, 1:end .!= k] ⋅  β[1:end .!= k]
-            if X[i,k] > 0
-                u₂[i] > 0 && append!(l, (y[i]-μ-(1-α)*σ*u₂[i]^(1/θ))/X[i,k])
-                u₁[i] > 0 && append!(u, (y[i]-μ+ α*σ*u₁[i]^(1/θ))/X[i,k])
-            elseif X[i, k] < 0
-                u₁[i] > 0 && append!(l, (μ - y[i] - α*σ*u₁[i]^(1/θ))/(-X[i,k]))
-                u₂[i] > 0 && append!(u, (μ - y[i] + (1-α)*σ*u₂[i]^(1/θ))/(-X[i,k]))
+    βsim = zeros(p)
+    for k in 1:p
+        l, u = [-Inf], [Inf]
+        for i in 1:n
+            a = (y[i] - X[i, 1:end .!= k] ⋅  β[1:end .!= k]) / X[i, k]
+            b₁ = α*σ*(u₁[i]^(1/θ)) / X[i, k]
+            b₂ = (1-α)*σ*(u₂[i]^(1/θ)) / X[i, k]
+            if (u₁[i] > 0) && (X[i, k] < 0)
+                append!(l, a + b₁)
+            elseif (u₂[i] > 0) && (X[i, k] > 0)
+                append!(l, a - b₂)
+            elseif (u₁[i] > 0) && (X[i, k] > 0)
+                append!(u, a + b₁)
+            elseif (u₂[i] > 0) && (X[i, k] < 0)
+                append!(u, a - b₂)
             end
         end
-        length(l) == 0. && append!(l, -Inf)
-        length(u) == 0. && append!(u, Inf)
-        βₛ[k] = rand(truncated(Normal(0, τ), maximum(l), minimum(u[findall(u .>= maximum(l))])), 1)[1]
+        βsim[k] = rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1]
     end
-    βₛ
+    βsim
 end
 
 function sampleμ(y::Array{T,1}, u₁::Array{T, 1}, u₂::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}

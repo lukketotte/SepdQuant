@@ -29,11 +29,10 @@ function pdf(d::aepd, x::Real)
 end
 
 function rand(rng::AbstractRNG, d::aepd)
-    del = δ(d.p, d.α)
     if rand(rng) < d.α
-        d.μ + d.σ * (-d.α * (rand(Gamma(1/d.p, 1))/del)^(1/d.p))
+        d.μ + d.σ * (-d.α * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
     else
-        d.μ + d.σ * ((1-d.α) * (rand(Gamma(1/d.p, 1))/del)^(1/d.p))
+        d.μ + d.σ * ((1-d.α) * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
     end
 end
 

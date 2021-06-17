@@ -1,6 +1,6 @@
 module QR
 
-export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval, sampleμ, mcmc
+export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval, sampleμ, mcmc, δ
 
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, DataFrames
 
@@ -77,7 +77,7 @@ function sampleσ(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T)
     z = y - X*β
     pos = findall(z .> 0)
     b = (δ(α, θ) * sum(abs.(z[Not(pos)]).^θ) / α^θ) + (δ(α, θ) * sum(abs.(z[pos]).^θ) / (1-α)^θ)
-    rand(InverseGamma(length(y), b), 1)[1]
+    (rand(InverseGamma(length(y)/θ, b), 1)[1])^(1/θ)
 end
 
 function sampleσ(y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
@@ -204,19 +204,19 @@ end
 
 function mcmc(y::Array{T, 1}, X::Array{T, 2}, α::T, nMCMC::N;
     θinit::T = 1., σinit::T = 1., printIter::N = 5000) where {T <: Real, N <: Integer}
-    n = length(y)
+    n, p = size(X)
     σ, σₗ, θ = zeros(nMCMC), zeros(nMCMC), zeros(nMCMC)
     σ[1] = σinit
-    β = zeros(nMCMC, 2)
+    β = zeros(nMCMC, p)
     β[1, :] = inv(X'*X)*X'*y
     θ[1] = θinit
 
     for i ∈ 2:nMCMC
         σ[i] = sampleσ(X, y, β[i-1,:], α, θ[i-1])
         u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i])
-        β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i-1], σ[i], 100.)
         # σ[i], σₗ[i] = sampleσ(X, y, u1, u2, β[i, :], α, θ[i-1], 1, 1.)
-        θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i, :], α, σ[i])
+        θ[i] = sampleθ(θ[i-1], .1, X, y, u1, u2, β[i-1, :], α, σ[i])
+        β[i,:] = sampleβ(X, y, u1, u2, β[i,:], α, θ[i-1], σ[i], 100.)
         if i % printIter === 0
             interval = θinterval(X, y, u1, u2, β[i,:], α, σ[i])
             printfmt("iter: {1}, θ ∈ [{2:.2f}, {3:.2f}], σ = {4:.2f} \n", i, interval[1], interval[2], σ[i])

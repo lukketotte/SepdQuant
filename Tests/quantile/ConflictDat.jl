@@ -13,7 +13,7 @@ y₁ = Float64.(dat."fatality_lag_ln")
 X = Float64.(dat[:, [:intensity, :pop_dens, :foreign_f, :loot, :ethnic]] |> Matrix)
 y₁ = y₁[y₁.>0]
 X = X[findall(y₁.>0),:]
-α, n = 0.1, length(y)
+α, n = 0.3, length(y)
 
 nMCMC = 50000
 β = zeros(nMCMC, 5)

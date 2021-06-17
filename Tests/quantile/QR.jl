@@ -95,6 +95,7 @@ function sampleσ(y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     rand(Pareto(a + n - 1, maximum(lower)), 1)[1], maximum(lower)
 end
 
+# TODO: not always maximum(l) < minimum(up). Around 10-15% of samples
 function θinterval(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
     β::Array{T, 1}, α::T, σ::T) where {T <: Real}
 

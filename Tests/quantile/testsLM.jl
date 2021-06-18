@@ -74,14 +74,15 @@ plot(θ, label="θ")
 plot!(σ, label="σ")
 
 # thin = ((1:nMCMC) .% 30) .=== 0
-plot(β[:, 2], label="trace")
+plot(β[:, 1], label="trace")
 plot!(cumsum(β[:, 1])./(1:length(β[:, 1])), label="running")
 plot(σ, label="running")
 plot!(cumsum(σ)./(1:length(σ)), label="σ")
 
 median(β[50000:nMCMC, 2])
-mean(σ)
-mean(θ)
+mean(σ[10000:nMCMC])
+mean(θ[10000:nMCMC])
+
 
 u1, u2 = sampleLatent(X, y, β, α, θ, σ)
 β = sampleβ(X, y, u1, u2, β, α, θ, σ, 100.)

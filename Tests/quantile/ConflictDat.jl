@@ -13,11 +13,11 @@ y₁ = Float64.(dat."fatality_lag_ln")
 X = Float64.(dat[:, [:intensity, :pop_dens, :foreign_f, :loot, :ethnic]] |> Matrix)
 y₁ = y₁[y₁.>0]
 X = X[findall(y₁.>0),:]
-α, n = 0.3, length(y)
+α, n = 0.5, length(y)
 
 nMCMC = 50000
 β = zeros(nMCMC, 5)
-β[1,:] = inv(X'*X)*X'*y
+β[1,:] = inv(X'*X)*X'*y₁
 σ, θ = zeros(nMCMC), zeros(nMCMC)
 σ[1] = 1.
 θ[1] = 1.
@@ -28,7 +28,7 @@ for i ∈ 2:nMCMC
         println("iter: ", i, " θ = ", round(θ[i-1], digits = 2))
     end
     # jittering to make quantiles continuous
-    global y = log.((exp.(y₁) + rand(Uniform(), length(y)) .- α))
+    global y = log.((exp.(y₁) + rand(Uniform(), length(y₁)) .- α))
     z = y - X*β[i-1,:]
     pos = findall(z .> 0)
     # using jacobian u = σ^p https://barumpark.com/blog/2019/Jacobian-Adjustments/

@@ -4,12 +4,42 @@ export sampleLatent, sampleσ, sampleθ, sampleβ, θinterval, sampleμ, mcmc, �
 
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, DataFrames
 
+"""
+    δ(α, θ)
+
+δ-function of the AEPD pdf
+
+# Arguments
+- `α::Real`: assymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+"""
 function δ(α::T, θ::T)::T where {T <: Real}
+    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
+    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
     2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
 
+"""
+    sampleLatent(X, y, β, α, θ, σ)
+
+Samples latent u₁ and u₂ based on the uniform mixture
+
+# Arguments
+- `X::Array{Real, 2}`: model matrix
+- `y::Array{Real, 1}`: dependent variable
+- `β::Array{Real, 1}`: coefficient vector
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+- `σ::Real`: scale parameter, σ ≥ 0
+"""
 function sampleLatent(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T, σ::T) where {T <: Real}
-    n,_ = size(X)
+    n, p = size(X)
+    n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
+    p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
+    (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
+    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
+    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
+
     u₁, u₂ = zeros(n), zeros(n)
     μ = X*β
     for i ∈ 1:n
@@ -152,6 +182,20 @@ function sampleθ(θ::T, ε::T, X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1
 
     prop = rand(Uniform(interval[1], interval[2]))
     θcond(prop, u₁, u₂, α) - θcond(θ, u₁, u₂, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+end
+
+function θBlockCond(θ::T, X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T) where {T <: Real}
+    n = length(y)
+    z  = y-X*β
+    pos = findall(z .> 0)
+    a = δ(α, θ)*(sum(abs.(z[Not(pos)]).^θ)/α^θ + sum(z[pos].^θ)/(1-α)^θ)
+    n/θ * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
+end
+
+function sampleθBlock(θ::T, X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1},
+    α::T, ε::T) where {T <: Real}
+    prop = rand(Uniform(maximum([0., θ-ε]), θ + ε), 1)[1]
+    θBlockCond(prop, X, y, β, α) - θBlockCond(θ, X, y, β, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
 

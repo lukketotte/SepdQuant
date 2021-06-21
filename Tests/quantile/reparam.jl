@@ -1,10 +1,8 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
-using ForwardDiff
 include("QR.jl")
 include("../aepd.jl")
 using .AEPD, .QR
-using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles
-
+using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles, KernelDensity
 theme(:juno)
 
 function sampleLatentBlock(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T, σ::T) where {T <: Real}
@@ -43,22 +41,42 @@ function sampleσBlock(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, �
     rand(InverseGamma(length(y)/θ, b), 1)[1]
 end
 
-function logβCond(β::Array{T, 1}, X::Array{T, 2}, y::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
+function logβCond(β::Array{T, 1}, X::Array{T, 2}, y::Array{T, 1}, α::T, θ::T,
+        σ::T, τ::T, λ::Array{T, 1}) where {T <: Real}
     z = y - X*β
     pos = findall(z .> 0)
     b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
-    -b -1/(2*τ) * β'⋅β
+    -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
+end
+
+"""
+Computes the gradient of ∫ π(β,σ|⋅)dσ wrt. β
+"""
+function ∇ᵦ(β::Array{T, 1}, X::Array{T, 2}, y::Array{T, 1}, α::T, θ::T, σ::T,
+        τ::T, λ::Array{T, 1}) where {T <: Real}
+    z = y - X*β
+    posId = findall(z.>0)
+    p=length(β)
+    ∇ = zeros(p)
+    for k in 1:p
+        ℓ₁ = θ/α^θ * sum(z[Not(posId)].^(θ-1) .* X[Not(posId), k])
+        ℓ₂ = θ/(1-α)^θ * sum(z[posId].^(θ-1) .* X[posId, k])
+        ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/(τ^2 * λ[k]^2)
+    end
+    ∇
 end
 
 
-function βMh(β::Array{T, 1}, ε::T,  X::Array{T, 2}, y::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
+function βMh(β::Array{T, 1}, ε::Array{T, 1},  X::Array{T, 2}, y::Array{T, 1}, α::T, θ::T, σ::T, τ::T) where {T <: Real}
     # prop = vec(rand(MvNormal(β, ε), 1))
     # try MALA sampling
-    z = y - X*β
-    ∇ = δ(α, θ)/σ .* β .* (sum(z .< 0)/α^θ - sum(z .> 0)/(1-α)^θ - 1/τ)
-    μ = β + ε^2/2 .* ∇
-    prop = vec(rand(MvNormal(μ, ε), 1))
-    βCond(prop, X, y, α, θ, σ, 100.) - βCond(β, X, y, α, θ, σ, 100.) > log(rand(Uniform(0,1), 1)[1]) ? prop : β
+    λ = abs.(rand(Cauchy(0,1), length(β)))
+    # ∇ = ∇ᵦ(β, X, y, α, θ, σ, 100., λ)
+    # μ = β + ε^2/2 .* ∇
+    # prop = β - ε .* ∇ + √(2*ε) * vec(rand(MvNormal(zeros(length(β)), 1), 1))
+    prop = rand(MvNormal(β, diagm(ε)), 1) |> vec
+    α₁ = logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ)
+    α₁ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
 
 function sampleβBlock(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::Array{T, 1},
@@ -81,19 +99,25 @@ function sampleβBlock(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::
                 append!(u, a - b₂)
             end
         end
-        βsim[k] =  maximum(l) < minimum(u) ? rand(truncated(Normal(0, τ), maximum(l), minimum(u)), 1)[1] : β[k]
+        # Horse-shoe prior
+        λ = 1.# abs(rand(Cauchy(0 , 1), 1)[1])
+        βsim[k] =  maximum(l) < minimum(u) ? rand(truncated(Normal(0, λ*τ), maximum(l), minimum(u)), 1)[1] : β[k]
     end
     βsim
 end
 
+
 ## test
-n = 200;
+n = 500;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
-nMCMC = 10000
+rand(MvNormal(β, diagm([0.1, 0.01])), 1) |> vec
+
+
+nMCMC = 50000
 β = zeros(nMCMC, 2)
 β[1,:] = [2.1, 0.8]
 σ, θ = zeros(nMCMC), zeros(nMCMC)
@@ -106,16 +130,67 @@ for i ∈ 2:nMCMC
     end
     θ[i] = sampleθBlock(θ[i-1], X, y, β[i-1,:], α, 0.05)
     σ[i] = sampleσBlock(X, y, β[i-1,:], α, θ[i])
-    global u1, u2 = sampleLatentBlock(X, y, β[i-1,:], α, θ[i], σ[i])
+    # θ[i] = 1.
+    # σ[i] = 2.
+    # global u1, u2 = sampleLatentBlock(X, y, β[i-1,:], α, θ[i], σ[i])
     # β[i,:] = sampleβBlock(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 100.)
-    β[i,:] = [2.1, 0.8]
-    # β[i,:] = βMh(β[i-1,:], 0.01, X, y, α, θ[i], σ[i], 100.)
+    # β[i,:] = [2.1, 0.8]
+    β[i,:] = βMh(β[i-1,:], [0.01, 0.001], X, y, α, θ[i], σ[i], 100.)
 end
 
 plot(θ, label="θ")
 plot(σ, label="σ")
-plot(β[:, 2], label="β")
+plot(β[:, 1], label="β")
 
-median(β[1000:nMCMC, 1])
+median(β[50000:nMCMC, 1])
 median(σ[1000:nMCMC])
 median(θ[1000:nMCMC])
+
+1-((β[2:nMCMC, 1] .=== β[1:(nMCMC - 1), 1]) |> mean)
+##
+dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame
+dat = dat[:, Not(filter(c -> count(ismissing, dat[:,c])/size(dat,1) > 0.05, names(dat)))]
+dropmissing!(dat)
+
+y₁ = Float64.(dat."fatality_lag_ln")
+colSub = [:intensity, :pop_dens_ln, :foreign_f, :ethnic, :rebstrength, :loot,
+    :territorial,  :length, :govtbestfatal_ln]
+X = Float64.(dat[:, colSub] |> Matrix)
+y₁ = y₁[y₁.>0]
+X = X[findall(y₁.>0),:]
+X = hcat([1 for i in 1:260], X)
+α, n = 0.5, length(y₁)
+
+
+nMCMC = 1000000
+β = zeros(nMCMC, 10)
+β[1,:] = inv(X'*X)*X'*y₁
+σ, θ = zeros(nMCMC), zeros(nMCMC)
+σ[1] = 1.
+θ[1] = 1.
+
+for i ∈ 2:nMCMC
+    if i % 10000 === 0
+        println("iter: ", i)
+    end
+    global y = log.((exp.(y₁) + rand(Uniform(), length(y₁)) .- α))
+    θ[i] = sampleθBlock(θ[i-1], X, y, β[i-1,:], α, 0.05)
+    σ[i] = sampleσBlock(X, y, β[i-1,:], α, θ[i])
+    global u1, u2 = sampleLatentBlock(X, y, β[i-1,:], α, θ[i], σ[i])
+    β[i,:] = sampleβBlock(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 100.)
+end
+
+thin = ((1:nMCMC) .% 20) .=== 0
+plot(θ[thin], label="θ")
+plot(σ[thin], label="σ")
+plot(β[thin,10], label="β")
+
+plot(cumsum(β[:,10]) ./ (1:length(σ)))
+plot(cumsum(θ) ./ (1:length(σ)))
+median(β[thin, 7])
+
+
+p = 10
+b1 = kde(β[thin, p])
+x = range(median(β[thin, p])-1, median(β[thin, p])+1, length = 1000)
+plot(x, pdf(b1, x))

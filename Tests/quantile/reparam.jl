@@ -106,25 +106,25 @@ function sampleβBlock(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::
     βsim
 end
 
+typeof(β) <: Union{Real, Array{<:Real, 1}}
+length(0.5)
+ε = [1.]
 
+typeof(ε) <: Real
+typeof(ε) <: Real ? ε : diagm(ε)
 ## test
 n = 500;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
+y = X*β .+ rand(Laplace(0, 1), n)
 
-λ = abs.(rand(Cauchy(0,1), length(β)))
-∇ᵦ(β[2-1,:], X, y, α, θ[2], σ[2], 100., λ)
-z = y - X*β[1,:]
+y - X[:, 1] * β[1]
 
-posId = findall(z.>0)
-θ[2]/α^θ[2] * sum(z[Not(posId)].^(θ[2]-1) .* X[Not(posId), 1])
+n, _ = validateParams(X, y, β, α, θ, -1.)
 
-z[Not(posId)]
-
-θ[2]/α^θ[2]
-
+validateParams()
 nMCMC = 10000
 β = zeros(nMCMC, 2)
 β[1,:] = [2.1, 0.8]

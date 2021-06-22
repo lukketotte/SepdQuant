@@ -1,5 +1,23 @@
 module QuantileReg
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, DataFrames
+
+export MCMCparams
+
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, DataFrames, ProgressMeter
+include("Validation.jl")
+using .Validation
+
+abstract type MCMCAbstractType end
+# TODO: documentaiton and more validation, especially of Θ
+struct MCMCparams <: MCMCAbstractType
+    y::Array{<:Real, 1}
+    X::Array{<:Real, 2}
+    nMCMC::Int
+    thin::Int
+    burnIn::Int
+
+    function MCMCParams(y::Array{<:Real, 1}, X::Array{<:Real, 2}, nMCMC::Int)
+        new(y, X, nMCMC, 1, 1)
+end
 
 """
     δ(α, θ)
@@ -14,12 +32,10 @@ using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, Dat
 - `θ::Real`: shape parameter, θ ≥ 0
 """
 function δ(α::Real, θ::Real)
-    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
-    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
-    2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
+    validateParams(α, θ)
+    return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
 
-δ
 
 """
     sampleLatent(X, y, β, α, θ, σ)
@@ -27,20 +43,15 @@ end
 Samples latent u₁ and u₂ based on the uniform mixture
 
 # Arguments
-- `X::Array{Real, 2}`: model matrix
-- `y::Array{Real, 1}`: dependent variable
-- `β::Array{Real, 1}`: coefficient vector
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
+- `β::Array{<:Real, 1}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 """
-function sampleLatent(X::Array{Real, 2}, y::Array{Real, 1}, β::Array{Real, 1}, α::Real, θ::Real, σ::Real)
-    n, p = size(X)
-    n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
-    p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
-    (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
-    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
-    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
+function sampleLatent(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, θ::Real, σ::Real)
+    n, p = validateParams(X, y, β, α, θ, σ)
     u₁, u₂ = zeros(n), zeros(n)
     μ = X*β
     for i ∈ 1:n
@@ -52,31 +63,186 @@ function sampleLatent(X::Array{Real, 2}, y::Array{Real, 1}, β::Array{Real, 1}, 
             u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
         end
     end
-    u₁, u₂
+    return u₁, u₂
+end
+"""
+    θBlockCond(θ, X, y, β, α)
+
+Computes the conditional distribution of θ with σ marginalized as
+```math
+\\int_0^\\infty \\pi(\\theta, \\sigma | \\ldots)\\ d\\sigma
+```
+
+# Arguments
+- `θ::Real`: shape parameter, θ ≥ 0
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
+- `β::Array{<:Real, 1}`: coefficient vector
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+"""
+function θBlockCond(θ::T, X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::T) where {T <: Real}
+    n, _ = validateParams(X, y, β, α, θ)
+    z  = y-X*β
+    pos = findall(z .> 0)
+    a = δ(α, θ)*(sum(abs.(z[Not(pos)]).^θ)/α^θ + sum(z[pos].^θ)/(1-α)^θ)
+    return n/θ * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
+end
+
+
+"""
+    sampleθ(θ, X, y, β, α, ε)
+
+Samples from the marginalized conditional distribution of θ via MH using the proposal
+```math
+q(\\theta^*|\\theta) = U(\\max(0, \\theta - \\varepsilon), \\theta + \\varepsilon)
+```
+
+# Arguments
+- `θ::Real`: shape parameter, θ ≥ 0
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
+- `β::Array{<:Real, 1}`: coefficient vector
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `ε::Real`: Controls width of propsal interval, ε > 0
+"""
+function sampleθ(θ::Real, X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, ε::Real)
+    prop = rand(Uniform(maximum([0., θ-ε]), θ + ε), 1)[1]
+    return θBlockCond(prop, X, y, β, α) - θBlockCond(θ, X, y, β, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
 """
-    sampleLatent(X, y, β, α, θ, σ)
+    sampleσ(X, y, β, α, θ)
 
-Samples β using latent u₁ and u₂
+Samples from the marginalized conditional distribution of σ as a Gibbs step
 
 # Arguments
-- `X::Array{Real, 2}`: model matrix
-- `y::Array{Real, 1}`: dependent variable
-- `β::Array{Real, 1}`: coefficient vector
+- `θ::Real`: shape parameter, θ ≥ 0
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
+- `β::Array{<:Real, 1}`: coefficient vector
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+"""
+function sampleσ(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, θ::Real)
+    n, _ = validateParams(X, y, β, α, θ)
+    z = y - X*β
+    pos = findall(z .> 0)
+    b = (δ(α, θ) * sum(abs.(z[Not(pos)]).^θ) / α^θ) + (δ(α, θ) * sum(abs.(z[pos]).^θ) / (1-α)^θ)
+    return rand(InverseGamma(n/θ, b), 1)[1]
+end
+
+"""
+    logβCond(θ, X, y, β, α, θ, σ, τ, λ)
+
+Computes log of the conditional distribution of β with X being a n × p matrix
+
+# Arguments
+- `β::Array{<:Real, 1}`: coefficient vector
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
+- `λ::Array{Real, 1}`: Horse-shoe hyper-parameter
 """
-function sampleβBlock(X::Array{Real, 2}, y::Array{Real, 1}, u₁::Array{Real, 1}, u₂::Array{Real, 1},
-    β::Array{Real, 1}, α::Real, θ::Real, σ::Real, τ::Real)
+function logβCond(β::Array{<:Real, 1}, X::Array{<:Real, 2}, y::Array{<:Real, 1}, α::Real, θ::Real,
+        σ::Real, τ::Real, λ::Array{Real, 1})
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
     p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
     (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
     (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
     θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
+    σ < 0 && throw(DomainError(σ, "argument σ must be nonnegative"))
+
+    z = y - X*β
+    pos = findall(z .> 0)
+    b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
+    return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
+end
+
+"""
+    logβCond(θ, X, y, β, α, θ, σ, τ, λ)
+
+Computes log of the conditional distribution of β with X being a n × 1 vector
+
+# Arguments
+- `β::Real`: coefficient, β ∈ ℜ
+- `X::Array{<:Real, 1}`: vector of independent variable
+- `y::Array{<:Real, 1}`: dependent variable
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+- `σ::Real`: scale parameter, σ ≥ 0
+- `τ::Real`: scale of π(β), τ ≥ 0
+- `λ::Real`: Horse-shoe hyper-parameter
+"""
+function logβCond(β::Real, X::Array{<:Real, 1}, y::Array{<:Real, 1}, α::Real, θ::Real,
+        σ::Real, τ::Real, λ::Real)
+    n = length(y)
+    n == length(X) || throw(DomainError("nrow of X not equal to length of y"))
+    (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
+    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
+    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
+    σ < 0 && throw(DomainError(σ, "argument σ must be nonnegative"))
+
+    z = y - X*β
+    pos = findall(z .> 0)
+    b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
+    return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
+end
+
+"""
+    ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
+
+Computes
+```math
+\\nabla_\\beta \\log \\pi(\\beta | \\ldots)
+```
+
+# Arguments
+- `β::Array{<:Real, 1}`: coefficient vector
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+- `σ::Real`: scale parameter, σ ≥ 0
+- `τ::Real`: scale of π(β), τ ≥ 0
+- `λ::Array{<:Real, 1}`: Horse-shoe hyper-parameter
+"""
+function ∇ᵦ(β::Array{<:Real, 1}, X::Array{<:Real, 2}, y::Array{<:Real, 1}, α::Real, θ::Real, σ::Real,
+        τ::Real, λ::Array{<:Real, 1})
+    z = y - X*β
+    posId = findall(z.>0)
+    p=length(β)
+    ∇ = zeros(p)
+    for k in 1:p
+        ℓ₁ = θ/α^θ * sum(abs.(z[Not(posId)]).^(θ-1) .* X[Not(posId), k])
+        ℓ₂ = θ/(1-α)^θ * sum(z[posId].^(θ-1) .* X[posId, k])
+        ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/(τ^2 * λ[k]^2)
+    end
+    return ∇
+end
+
+"""
+    sampleβ(X, y, u₁, u₂, β, α, θ, σ)
+
+Samples β using latent u₁ and u₂ via Gibbs
+
+# Arguments
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
+- `u₁::Array{<:Real, 1}`: latent variable
+- `u₂::Array{<:Real, 1}`: latent variable
+- `β::Array{<:Real, 1}`: coefficient vector
+- `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+- `σ::Real`: scale parameter, σ ≥ 0
+- `τ::Real`: scale of π(β), τ ≥ 0
+"""
+function sampleβ(X::Array{<:Real, 2}, y::Array{<:Real, 1}, u₁::Array{<:Real, 1}, u₂::Array{<:Real, 1},
+    β::Array{<:Real, 1}, α::Real, θ::Real, σ::Real, τ::Real)
+    n, p = validateParams(X, y, β, α, θ, σ)
     βsim = zeros(p)
     for k in 1:p
         l, u = [-Inf], [Inf]
@@ -97,80 +263,64 @@ function sampleβBlock(X::Array{Real, 2}, y::Array{Real, 1}, u₁::Array{Real, 1
         λ = abs(rand(Cauchy(0 , 1), 1)[1])
         βsim[k] =  maximum(l) < minimum(u) ? rand(truncated(Normal(0, λ*τ), maximum(l), minimum(u)), 1)[1] : β[k]
     end
-    βsim
+    return βsim
 end
 
 """
-    θBlockCond(θ, X, y, β, α)
+    sampleβ(X, y, β, α, θ, σ)
 
-Computes the conditional distribution of θ with σ marginalized as
-```math
-\\int_0^\\infty \\pi(\\theta, \\sigma | \\ldots)\\ d\\sigma
-```
+Samples β using via MALA-MH
 
 # Arguments
-- `θ::Real`: shape parameter, θ ≥ 0
-- `X::Array{Real, 2}`: model matrix
-- `y::Array{Real, 1}`: dependent variable
-- `β::Array{Real, 1}`: coefficient vector
+- `β::Array{<:Real, 1}`: coefficient vector
+- `ε::Union{Real, Array{<:Real, 1}}`: vector or scalar of propsal variance(s)
+- `X::Array{<:Real, 2}`: model matrix
+- `y::Array{<:Real, 1}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
+- `θ::Real`: shape parameter, θ ≥ 0
+- `σ::Real`: scale parameter, σ ≥ 0
+- `τ::Real`: scale of π(β), τ ≥ 0
 """
-function θBlockCond(θ::T, X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T) where {T <: Real}
-    n, p = size(X)
-    n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
-    p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
-    (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
-    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
-    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
-
-    z  = y-X*β
-    pos = findall(z .> 0)
-    a = δ(α, θ)*(sum(abs.(z[Not(pos)]).^θ)/α^θ + sum(z[pos].^θ)/(1-α)^θ)
-    n/θ * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
+function sampleβ(β::Array{<:Real, 1}, ε::Union{Real, Array{<:Real, 1}},  X::Array{<:Real, 2},
+        y::Array{<:Real, 1}, α::Real, θ::Real, σ::Real, τ::Real)
+    # prop = vec(rand(MvNormal(β, ε), 1))
+    _, _ = validateParams(X, y, β, ε, α, θ, σ)
+    λ = abs.(rand(Cauchy(0,1), length(β)))
+    ∇ = ∇ᵦ(β, X, y, α, θ, σ, 100., λ)
+    prop = rand(MvNormal(β + ε.^2 ./ 2 .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
+    α₁ = logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ)
+    α₁ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
 
+InitParam = Union{Real, Array{<:Real, 1}, Nothing}
 
 """
-    sampleθ(θ, X, y, β, α, ε)
+    MCMC(Params)
 
-Samples from the marginalized conditional distribution of θ via MH using the proposal
-```math
-q(\\theta^*|\\theta) = U(\\max(0, \\theta - \\varepsilon), \\theta + \\varepsilon)
-```
+MCMC algorithm for the the AEPD with known α
 
 # Arguments
-- `θ::Real`: shape parameter, θ ≥ 0
-- `X::Array{Real, 2}`: model matrix
-- `y::Array{Real, 1}`: dependent variable
-- `β::Array{Real, 1}`: coefficient vector
-- `α::Real`: Asymmetry parameter, α ∈ (0,1)
-- `ε::Real`: Controls width of propsal interval, ε > 0
+- `params <: MCMCAbstractType`: struct with all settings for sampler
+- `α::Real`: Asymmetry parameter which determines quantile, α ∈ (0,1)
+- `τ::Real`: Hyperparameter for π(β) scale, τ > 0
+- `ε::Real`: Width of proposal interval for MH step for θ, ε > 0
+- `εᵦ::Union{Real, Array{<:Real, 1}}`: Variance of proposal for MH step for β
+- `β₁::Union{Real, Array{<:Real, 1}, Nothing}`: Initial value for β
+- `σ₁::Real`: Initial value for σ
+- `θ₁::Real`: Initial value for θ
 """
-function sampleθ(θ::Real, X::Array{Real, 2}, y::Array{Real, 1}, β::Array{Real, 1}, α::Real, ε::Real)
-    prop = rand(Uniform(maximum([0., θ-ε]), θ + ε), 1)[1]
-    θBlockCond(prop, X, y, β, α) - θBlockCond(θ, X, y, β, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
-end
+function MCMC(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Union{Real, Array{<:Real, 1}} = 0.01,
+        β₁::InitParam = nothing, σ₁::Real = 1, θ₁::Real = 1)
+    # TODO: validation
+    n, p = size(params.X)
+    β, σ, θ = zeros(nMCMC, p), zeros(nMCMC), zeros(nMCMC)
+    β[1,:] = typeof(β₁) <: Nothing ? inv(X'*X)*X'*y : β₁
+    σ[1], θ[1] = σ₁, θ₁
 
-"""
-    sampleσ(X, y, β, α, θ)
-
-Samples from the marginalized conditional distribution of θ via MH using the proposal
-```math
-q(\\theta^*|\\theta) = U(\\max(0, \\theta - \\varepsilon), \\theta + \\varepsilon)
-```
-
-# Arguments
-- `θ::Real`: shape parameter, θ ≥ 0
-- `X::Array{Real, 2}`: model matrix
-- `y::Array{Real, 1}`: dependent variable
-- `β::Array{Real, 1}`: coefficient vector
-- `α::Real`: Asymmetry parameter, α ∈ (0,1)
-"""
-function sampleσ(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T) where {T, N <: Real}
-    z = y - X*β
-    pos = findall(z .> 0)
-    b = (δ(α, θ) * sum(abs.(z[Not(pos)]).^θ) / α^θ) + (δ(α, θ) * sum(abs.(z[pos]).^θ) / (1-α)^θ)
-    rand(InverseGamma(length(y)/θ, b), 1)[1]
-end
-
+    @showprogress 1 "Sampling..." for i in 1:params.nMCMC
+        θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, 0.05)
+        σ[i] = sampleσ(X, y, β[i-1,:], α, θ[i])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, X, y, α, θ[i], σ[i], 100.)
+    end
+    return β, θ, σ
 end

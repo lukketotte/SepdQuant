@@ -59,7 +59,7 @@ function ∇ᵦ(β::Array{T, 1}, X::Array{T, 2}, y::Array{T, 1}, α::T, θ::T, �
     p=length(β)
     ∇ = zeros(p)
     for k in 1:p
-        ℓ₁ = θ/α^θ * sum(z[Not(posId)].^(θ-1) .* X[Not(posId), k])
+        ℓ₁ = θ/α^θ * sum(abs.(z[Not(posId)]).^(θ-1) .* X[Not(posId), k])
         ℓ₂ = θ/(1-α)^θ * sum(z[posId].^(θ-1) .* X[posId, k])
         ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/(τ^2 * λ[k]^2)
     end
@@ -71,10 +71,10 @@ function βMh(β::Array{T, 1}, ε::Array{T, 1},  X::Array{T, 2}, y::Array{T, 1},
     # prop = vec(rand(MvNormal(β, ε), 1))
     # try MALA sampling
     λ = abs.(rand(Cauchy(0,1), length(β)))
-    # ∇ = ∇ᵦ(β, X, y, α, θ, σ, 100., λ)
-    # μ = β + ε^2/2 .* ∇
-    # prop = β - ε .* ∇ + √(2*ε) * vec(rand(MvNormal(zeros(length(β)), 1), 1))
-    prop = rand(MvNormal(β, diagm(ε)), 1) |> vec
+    ∇ = ∇ᵦ(β, X, y, α, θ, σ, 100., λ)
+    μ = β + ε.^2 ./ 2 .* ∇
+    # prop = β - ε^2/2 .* ∇
+    prop = rand(MvNormal(μ, diagm(ε)), 1) |> vec
     α₁ = logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ)
     α₁ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
@@ -114,10 +114,18 @@ n = 500;
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
-rand(MvNormal(β, diagm([0.1, 0.01])), 1) |> vec
+λ = abs.(rand(Cauchy(0,1), length(β)))
+∇ᵦ(β[2-1,:], X, y, α, θ[2], σ[2], 100., λ)
+z = y - X*β[1,:]
 
+posId = findall(z.>0)
+θ[2]/α^θ[2] * sum(z[Not(posId)].^(θ[2]-1) .* X[Not(posId), 1])
 
-nMCMC = 50000
+z[Not(posId)]
+
+θ[2]/α^θ[2]
+
+nMCMC = 10000
 β = zeros(nMCMC, 2)
 β[1,:] = [2.1, 0.8]
 σ, θ = zeros(nMCMC), zeros(nMCMC)
@@ -135,12 +143,12 @@ for i ∈ 2:nMCMC
     # global u1, u2 = sampleLatentBlock(X, y, β[i-1,:], α, θ[i], σ[i])
     # β[i,:] = sampleβBlock(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 100.)
     # β[i,:] = [2.1, 0.8]
-    β[i,:] = βMh(β[i-1,:], [0.01, 0.001], X, y, α, θ[i], σ[i], 100.)
+    β[i,:] = βMh(β[i-1,:], [0.05, 0.001], X, y, α, θ[i], σ[i], 100.)
 end
 
 plot(θ, label="θ")
 plot(σ, label="σ")
-plot(β[:, 1], label="β")
+plot(β[:, 2], label="β")
 
 median(β[50000:nMCMC, 1])
 median(σ[1000:nMCMC])

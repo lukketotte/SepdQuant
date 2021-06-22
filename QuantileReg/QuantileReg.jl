@@ -1,6 +1,6 @@
 module QuantileReg
 
-export MCMCparams
+export MCMCparams, MCMC
 
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, DataFrames, ProgressMeter
 include("Validation.jl")
@@ -8,15 +8,12 @@ using .Validation
 
 abstract type MCMCAbstractType end
 # TODO: documentaiton and more validation, especially of Θ
-struct MCMCparams <: MCMCAbstractType
+mutable struct MCMCparams <: MCMCAbstractType
     y::Array{<:Real, 1}
     X::Array{<:Real, 2}
     nMCMC::Int
     thin::Int
     burnIn::Int
-
-    function MCMCParams(y::Array{<:Real, 1}, X::Array{<:Real, 2}, nMCMC::Int)
-        new(y, X, nMCMC, 1, 1)
 end
 
 """
@@ -65,6 +62,7 @@ function sampleLatent(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real
     end
     return u₁, u₂
 end
+
 """
     θBlockCond(θ, X, y, β, α)
 
@@ -132,7 +130,7 @@ function sampleσ(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}
 end
 
 """
-    logβCond(θ, X, y, β, α, θ, σ, τ, λ)
+    logβCond(X, y, β, α, θ, σ, τ, λ)
 
 Computes log of the conditional distribution of β with X being a n × p matrix
 
@@ -147,15 +145,7 @@ Computes log of the conditional distribution of β with X being a n × p matrix
 - `λ::Array{Real, 1}`: Horse-shoe hyper-parameter
 """
 function logβCond(β::Array{<:Real, 1}, X::Array{<:Real, 2}, y::Array{<:Real, 1}, α::Real, θ::Real,
-        σ::Real, τ::Real, λ::Array{Real, 1})
-    n, p = size(X)
-    n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
-    p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
-    (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
-    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
-    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
-    σ < 0 && throw(DomainError(σ, "argument σ must be nonnegative"))
-
+        σ::Real, τ::Real, λ::Array{<:Real, 1})
     z = y - X*β
     pos = findall(z .> 0)
     b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
@@ -163,7 +153,7 @@ function logβCond(β::Array{<:Real, 1}, X::Array{<:Real, 2}, y::Array{<:Real, 1
 end
 
 """
-    logβCond(θ, X, y, β, α, θ, σ, τ, λ)
+    logβCond(β, X, y, α, θ, σ, τ, λ)
 
 Computes log of the conditional distribution of β with X being a n × 1 vector
 
@@ -179,17 +169,10 @@ Computes log of the conditional distribution of β with X being a n × 1 vector
 """
 function logβCond(β::Real, X::Array{<:Real, 1}, y::Array{<:Real, 1}, α::Real, θ::Real,
         σ::Real, τ::Real, λ::Real)
-    n = length(y)
-    n == length(X) || throw(DomainError("nrow of X not equal to length of y"))
-    (α < 0) || (α > 1) && throw(DomainError(α, "argument must be on (0,1) interval"))
-    (α < 0 || α > 1) && throw(DomainError(α, "argument α must be on (0,1) interval"))
-    θ < 0 && throw(DomainError(θ, "argument θ must be nonnegative"))
-    σ < 0 && throw(DomainError(σ, "argument σ must be nonnegative"))
-
     z = y - X*β
     pos = findall(z .> 0)
     b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
-    return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
+    return -b -1/(2*(τ*λ)^2) * β^2
 end
 
 """
@@ -267,7 +250,7 @@ function sampleβ(X::Array{<:Real, 2}, y::Array{<:Real, 1}, u₁::Array{<:Real, 
 end
 
 """
-    sampleβ(X, y, β, α, θ, σ)
+    sampleβ(X, y, β, α, θ, σ, MALA)
 
 Samples β using via MALA-MH
 
@@ -280,14 +263,21 @@ Samples β using via MALA-MH
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
+- `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
 function sampleβ(β::Array{<:Real, 1}, ε::Union{Real, Array{<:Real, 1}},  X::Array{<:Real, 2},
-        y::Array{<:Real, 1}, α::Real, θ::Real, σ::Real, τ::Real)
-    # prop = vec(rand(MvNormal(β, ε), 1))
-    _, _ = validateParams(X, y, β, ε, α, θ, σ)
-    λ = abs.(rand(Cauchy(0,1), length(β)))
-    ∇ = ∇ᵦ(β, X, y, α, θ, σ, 100., λ)
-    prop = rand(MvNormal(β + ε.^2 ./ 2 .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
+        y::Array{<:Real, 1}, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true)
+    _, p = validateParams(X, y, β, ε, α, θ, σ)
+    if MALA
+        λ = abs.(rand(Cauchy(0,1), p))
+        ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
+        prop = rand(MvNormal(β + ε.^2 ./ 2 .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
+    else
+        prop = vec(rand(MvNormal(β, typeof(ε) <: Real ? ε : diagm(ε))), 1)
+    end
+    λ = abs.(rand(Cauchy(0,1), p))
+    ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
+
     α₁ = logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ)
     α₁ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
@@ -308,19 +298,27 @@ MCMC algorithm for the the AEPD with known α
 - `β₁::Union{Real, Array{<:Real, 1}, Nothing}`: Initial value for β
 - `σ₁::Real`: Initial value for σ
 - `θ₁::Real`: Initial value for θ
+- `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
 function MCMC(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Union{Real, Array{<:Real, 1}} = 0.01,
-        β₁::InitParam = nothing, σ₁::Real = 1, θ₁::Real = 1)
+        β₁::InitParam = nothing, σ₁::Real = 1, θ₁::Real = 1, MALA = true)
     # TODO: validation
     n, p = size(params.X)
-    β, σ, θ = zeros(nMCMC, p), zeros(nMCMC), zeros(nMCMC)
+    β, σ, θ = zeros(params.nMCMC, p), zeros(params.nMCMC), zeros(params.nMCMC)
     β[1,:] = typeof(β₁) <: Nothing ? inv(X'*X)*X'*y : β₁
     σ[1], θ[1] = σ₁, θ₁
 
-    @showprogress 1 "Sampling..." for i in 1:params.nMCMC
-        θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, 0.05)
-        σ[i] = sampleσ(X, y, β[i-1,:], α, θ[i])
-        β[i,:] = sampleβ(β[i-1,:], εᵦ, X, y, α, θ[i], σ[i], 100.)
+    @showprogress 1 "Sampling..." for i in 2:params.nMCMC
+        θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, ε)
+        σ[i] = sampleσ(params.X, params.y, β[i-1,:], α, θ[i])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, params.y, α, θ[i], σ[i], τ, MALA)
     end
+    thin = ((params.burnIn:params.nMCMC) .% params.thin) .=== 0
+
+    #(β[par.burnIn:par.nMCMC,:])[thin,:]
+    β = (β[params.burnIn:params.nMCMC,:])[thin,:]
+    θ = (θ[params.burnIn:params.nMCMC])[thin]
+    σ = (σ[params.burnIn:params.nMCMC])[thin]
     return β, θ, σ
+end
 end

@@ -1,9 +1,15 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
-include("QR.jl")
 include("../aepd.jl")
-using .AEPD, .QR
+include("../../QuantileReg/QuantileReg.jl")
+using .AEPD, .QuantileReg
+
 using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles, KernelDensity
 theme(:juno)
+
+
+function δ(α::Real, θ::Real)
+    return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
+end
 
 function sampleLatentBlock(X::Array{T, 2}, y::Array{T, 1}, β::Array{T, 1}, α::T, θ::T, σ::T) where {T <: Real}
     u₁, u₂ = zeros(n), zeros(n)
@@ -106,26 +112,15 @@ function sampleβBlock(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::
     βsim
 end
 
-typeof(β) <: Union{Real, Array{<:Real, 1}}
-length(0.5)
-ε = [1.]
-
-typeof(ε) <: Real
-typeof(ε) <: Real ? ε : diagm(ε)
 ## test
 n = 500;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
-y = X*β .+ rand(Laplace(0, 1), n)
 
-y - X[:, 1] * β[1]
 
-n, _ = validateParams(X, y, β, α, θ, -1.)
-
-validateParams()
-nMCMC = 10000
+nMCMC = 50000
 β = zeros(nMCMC, 2)
 β[1,:] = [2.1, 0.8]
 σ, θ = zeros(nMCMC), zeros(nMCMC)
@@ -138,23 +133,41 @@ for i ∈ 2:nMCMC
     end
     θ[i] = sampleθBlock(θ[i-1], X, y, β[i-1,:], α, 0.05)
     σ[i] = sampleσBlock(X, y, β[i-1,:], α, θ[i])
-    # θ[i] = 1.
-    # σ[i] = 2.
-    # global u1, u2 = sampleLatentBlock(X, y, β[i-1,:], α, θ[i], σ[i])
-    # β[i,:] = sampleβBlock(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 100.)
-    # β[i,:] = [2.1, 0.8]
     β[i,:] = βMh(β[i-1,:], [0.05, 0.001], X, y, α, θ[i], σ[i], 100.)
 end
 
 plot(θ, label="θ")
 plot(σ, label="σ")
-plot(β[:, 2], label="β")
+plot(β[:, 1], label="β")
 
 median(β[50000:nMCMC, 1])
 median(σ[1000:nMCMC])
 median(θ[1000:nMCMC])
 
 1-((β[2:nMCMC, 1] .=== β[1:(nMCMC - 1), 1]) |> mean)
+1-((b[2:length(o), 1] .=== b[1:(length(o) - 1), 1]) |> mean)
+
+
+par = MCMCparams(y, X, 50000, 10, 10000)
+b, o, s = MCMC(par, 0.5, 100., 0.05, [0.05, 0.001], [2.1, 0.8], 2., 1., true)
+
+thin = ((par.burnIn:par.nMCMC) .% par.thin) .=== 0
+(β[par.burnIn:par.nMCMC,:])[thin,:]
+(β[par.burnIn:par.nMCMC,:])[thin,:]
+
+length(thin[par.burnIn:par.nMCMC])
+
+thin = ((1:nMCMC) .% 5) .=== 0
+
+median(o)
+median(s)
+plot(o, label="o")
+
+plot(β[:, 2], label="β")
+plot(b[:, 2], label="b")
+
+median(β[1000:nMCMC, 1])
+median(b[:, 2])
 ##
 dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame
 dat = dat[:, Not(filter(c -> count(ismissing, dat[:,c])/size(dat,1) > 0.05, names(dat)))]

@@ -38,7 +38,7 @@ function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Re
     return n, p
 end
 
-function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}
+function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1},
         εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, θ::Real, σ::Real)
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
@@ -55,7 +55,7 @@ function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Re
     return n, p
 end
 
-function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, ε::Real
+function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, ε::Real,
         εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, θ::Real, σ::Real)
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))

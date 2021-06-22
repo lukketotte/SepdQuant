@@ -119,6 +119,8 @@ n = 500;
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
+par = MCMCparams(y, X, 10000, 10, 1000)
+@time b, o, s = MCMC(par, 0.5, 100., 0.05, [0.05, 0.001], [2.1, 0.8], 2., 1., true)
 
 nMCMC = 50000
 β = zeros(nMCMC, 2)
@@ -147,10 +149,6 @@ median(θ[1000:nMCMC])
 1-((β[2:nMCMC, 1] .=== β[1:(nMCMC - 1), 1]) |> mean)
 1-((b[2:length(o), 1] .=== b[1:(length(o) - 1), 1]) |> mean)
 
-
-par = MCMCparams(y, X, 50000, 10, 10000)
-b, o, s = MCMC(par, 0.5, 100., 0.05, [0.05, 0.001], [2.1, 0.8], 2., 1., true)
-
 thin = ((par.burnIn:par.nMCMC) .% par.thin) .=== 0
 (β[par.burnIn:par.nMCMC,:])[thin,:]
 (β[par.burnIn:par.nMCMC,:])[thin,:]
@@ -168,6 +166,9 @@ plot(b[:, 2], label="b")
 
 median(β[1000:nMCMC, 1])
 median(b[:, 2])
+
+@view b[1:10, 1]
+view(b, 1:10, 1)
 ##
 dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame
 dat = dat[:, Not(filter(c -> count(ismissing, dat[:,c])/size(dat,1) > 0.05, names(dat)))]

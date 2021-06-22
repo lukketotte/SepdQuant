@@ -6,7 +6,6 @@ using .AEPD, .QuantileReg
 using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles, KernelDensity
 theme(:juno)
 
-
 function δ(α::Real, θ::Real)
     return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
@@ -113,14 +112,15 @@ function sampleβBlock(X::Array{T, 2}, y::Array{T, 1}, u₁::Array{T, 1}, u₂::
 end
 
 ## test
-n = 500;
+n = 100;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
-par = MCMCparams(y, X, 10000, 10, 1000)
-@time b, o, s = MCMC(par, 0.5, 100., 0.05, [0.05, 0.001], [2.1, 0.8], 2., 1., true)
+par = MCMCparams(y, X, 10000, 10, 100)
+b, o, s = MCMC(par, 0.5, 100., 0.05, [0.05, 0.001], [2.1, 0.8], 2., 1., true)
+
 
 nMCMC = 50000
 β = zeros(nMCMC, 2)

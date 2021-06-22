@@ -7,7 +7,7 @@ include("Validation.jl")
 using .Validation
 
 abstract type MCMCAbstractType end
-# TODO: documentaiton and more validation, especially of Θ
+# TODO: documentaiton
 mutable struct MCMCparams <: MCMCAbstractType
     y::Array{<:Real, 1}
     X::Array{<:Real, 2}
@@ -32,7 +32,6 @@ function δ(α::Real, θ::Real)
     validateParams(α, θ)
     return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
-
 
 """
     sampleLatent(X, y, β, α, θ, σ)
@@ -85,7 +84,6 @@ function θBlockCond(θ::T, X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{
     a = δ(α, θ)*(sum(abs.(z[Not(pos)]).^θ)/α^θ + sum(z[pos].^θ)/(1-α)^θ)
     return n/θ * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
 end
-
 
 """
     sampleθ(θ, X, y, β, α, ε)
@@ -315,7 +313,6 @@ function MCMC(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Un
     end
     thin = ((params.burnIn:params.nMCMC) .% params.thin) .=== 0
 
-    #(β[par.burnIn:par.nMCMC,:])[thin,:]
     β = (β[params.burnIn:params.nMCMC,:])[thin,:]
     θ = (θ[params.burnIn:params.nMCMC])[thin]
     σ = (σ[params.burnIn:params.nMCMC])[thin]

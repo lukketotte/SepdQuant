@@ -11,7 +11,7 @@ y = X * β .+ ϵ
 
 Xs = SMatrix{100,2}(X)
 βs = SVector{2}(β)
-ys = Xs*βs .+ ϵ
+ys = Xs*βs .+ SVector{n}(ϵ)
 
 Xs[1,:] ⋅ β
 
@@ -29,12 +29,13 @@ z[pos]
 @time filter(x->x>0.,z)
 @time findall(z.>0)
 
-typeof(βs)
+typeof(βs) <: SVector{2,Float64}
+typeof(Xs) <: SArray{Tuple{100,2},Float64}
 
-function ∇(β, X, y, α::Real, θ::Real, σ::Real, τ::Real)
+function ∇(β::MixedVector, X::MixedVector, y::MixedVector, α::Real, θ::Real, σ::Real, τ::Real)
     z = y - X*β
     pos, neg = z.>0, z.<0
-    p=length(β)
+    p = length(β)
     ∇ = MVector{p}(zeros(p))
     for k in 1:p
         ℓ₁ = θ/α^θ * sum((.-z[z.<0]).^(θ-1) .* X[z.<0, k])
@@ -44,6 +45,12 @@ function ∇(β, X, y, α::Real, θ::Real, σ::Real, τ::Real)
     return ∇
 end
 
+MixedVector = Union{SVector, Array{<:Real, 1}}
+size(Xs)
 
+typeof(βs) <: MixedVector
+typeof(ys)
 @time ∇(βs, Xs, ys, 0.5, 1., 1., 100)
 @time ∇(β, X, y, 0.5, 1., 1., 100)
+
+typeof(ys)

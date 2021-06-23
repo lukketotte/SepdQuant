@@ -1,4 +1,4 @@
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, StaticArrays
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -7,7 +7,7 @@ using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles, KernelDensity
 theme(:juno)
 
 ## test
-n = 10000;
+n = 1000;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
@@ -28,15 +28,35 @@ dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame
 dat = dat[:, Not(filter(c -> count(ismissing, dat[:,c])/size(dat,1) > 0.05, names(dat)))]
 dropmissing!(dat)
 
-y₁ = Float64.(dat."fatality_lag_ln")
+y = Float64.(dat."fatality_lag_ln")
 colSub = [:intensity, :pop_dens_ln, :foreign_f, :ethnic, :rebstrength, :loot,
     :territorial,  :length, :govtbestfatal_ln]
 X = Float64.(dat[:, colSub] |> Matrix)
-y₁ = y₁[y₁.>0]
-X = X[findall(y₁.>0),:]
+y = y[y.>0]
+X = X[findall(y.>0),:]
 X = hcat([1 for i in 1:260], X)
-α, n = 0.5, length(y₁)
+α, n = 0.5, length(y)
+y = trunc.(Int, exp.(y))
+inv(X'*X)*X'*log.(y)
+# y = SArray{n}(y)
+# X = SMatrix{260,10}(X)
 
+typeof(par.y[1]) <: Integer
+
+par = MCMCparams(log.(y), X, 500000, 20, 100000)
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.0165, nothing, 2., 1.)
+
+plot(β[:,8])
+plot(σ)
+plot(θ)
+1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
+
+βest = []
+for b in eachcol(β)
+    append!(βest, median(b))
+end
+
+println(βest)
 
 nMCMC = 1000000
 β = zeros(nMCMC, 10)

@@ -284,7 +284,7 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Un
     β = zeros(params.nMCMC, p)
     σ = zeros(params.nMCMC)
     θ = similar(σ)
-    β[1,:] = typeof(β₁) <: Nothing ? inv(X'*X)*X'*y : β₁
+    β[1,:] = typeof(β₁) <: Nothing ? inv(params.X'*params.X)*params.X'*params.y : β₁
     σ[1], θ[1] = σ₁, θ₁
 
     p = Progress(params.nMCMC-1, dt=0.5,
@@ -300,9 +300,12 @@ end
 
 function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i::Int, params::MCMCparams, ε::Real,
     εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, τ::Real, MALA::Bool)
-        θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, ε)
-        σ[i] = sampleσ(params.X, params.y, β[i-1,:], α, θ[i])
-        β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, params.y, α, θ[i], σ[i], τ, MALA)
+        # if y is integer, transform so that the quantiles are continuous
+        y = typeof(params.y[1]) <: Integer ?
+            log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y
+        θ[i] = sampleθ(θ[i-1], params.X, y, β[i-1,:], α, ε)
+        σ[i] = sampleσ(params.X, y, β[i-1,:], α, θ[i])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, y, α, θ[i], σ[i], τ, MALA)
         nothing
 end
 

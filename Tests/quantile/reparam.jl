@@ -3,7 +3,7 @@ include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
 
-using Plots, PlotThemes, Formatting, CSV, DataFrames, StatFiles, KernelDensity
+using Plots, PlotThemes, CSV, DataFrames, StatFiles, KernelDensity, CSVFiles
 theme(:juno)
 
 ## test
@@ -90,3 +90,19 @@ p = 10
 b1 = kde(β[thin, p])
 x = range(median(β[thin, p])-1, median(β[thin, p])+1, length = 1000)
 plot(x, pdf(b1, x))
+
+## BostonHousing
+dat = load(string(pwd(), "/Tests/data/BostonHousing.csv")) |> DataFrame
+y = dat[!, "medv"]
+X = dat[!, Not(:medv)] |> Matrix
+# X = hcat([1 for i in 1:length(y)], X)
+
+par = MCMCparams(y, X, 500000, 10, 200000)
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.00071, nothing, 3., .8)
+
+plot(β[:,6])
+plot(σ)
+plot(θ)
+plot(cumsum(θ)./(1:length(θ)))
+
+1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)

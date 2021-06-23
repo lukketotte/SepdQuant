@@ -1,19 +1,22 @@
 module QuantileReg
 
-export MCMCparams, MCMC
+export mcmc, MCMCparams
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Formatting, DataFrames, ProgressMeter
-include("Validation.jl")
-using .Validation
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, StaticArrays
+include("Utilities.jl")
+using .Utilities
 
 abstract type MCMCAbstractType end
-# TODO: documentaiton
 mutable struct MCMCparams <: MCMCAbstractType
-    y::Array{<:Real, 1}
-    X::Array{<:Real, 2}
+    y::MixedVec
+    X::MixedMat
     nMCMC::Int
     thin::Int
     burnIn::Int
+
+    MCMCparams(y::MixedVec, X::MixedMat, nMCMC::Int, thin::Int, burnIn::Int) = length(y) ==
+        size(X)[1] ? new(y, X, nMCMC, thin, burnIn) :
+        throw(DomainError("Size of y and X not matching"))
 end
 
 """
@@ -29,7 +32,6 @@ end
 - `θ::Real`: shape parameter, θ ≥ 0
 """
 function δ(α::Real, θ::Real)
-    validateParams(α, θ)
     return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
 
@@ -72,16 +74,16 @@ Computes the conditional distribution of θ with σ marginalized as
 
 # Arguments
 - `θ::Real`: shape parameter, θ ≥ 0
-- `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
-- `β::Array{<:Real, 1}`: coefficient vector
+- `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
+- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
+- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 """
-function θBlockCond(θ::T, X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::T) where {T <: Real}
-    n, _ = validateParams(X, y, β, α, θ)
+function θBlockCond(θ::Real, X::MixedMat, y::MixedVec, β::MixedVec, α::Real)
     z  = y-X*β
+    n = length(y)
     pos = findall(z .> 0)
-    a = δ(α, θ)*(sum(abs.(z[Not(pos)]).^θ)/α^θ + sum(z[pos].^θ)/(1-α)^θ)
+    a = δ(α, θ)*(sum((.-z[z.<0]).^θ)/α^θ + sum(z[z.>=0].^θ)/(1-α)^θ)
     return n/θ * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
 end
 
@@ -95,13 +97,13 @@ q(\\theta^*|\\theta) = U(\\max(0, \\theta - \\varepsilon), \\theta + \\varepsilo
 
 # Arguments
 - `θ::Real`: shape parameter, θ ≥ 0
-- `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
-- `β::Array{<:Real, 1}`: coefficient vector
+- `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
+- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
+- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `ε::Real`: Controls width of propsal interval, ε > 0
 """
-function sampleθ(θ::Real, X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, ε::Real)
+function sampleθ(θ::Real, X::MixedMat, y::MixedVec, β::MixedVec, α::Real, ε::Real)
     prop = rand(Uniform(maximum([0., θ-ε]), θ + ε), 1)[1]
     return θBlockCond(prop, X, y, β, α) - θBlockCond(θ, X, y, β, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
@@ -113,17 +115,16 @@ Samples from the marginalized conditional distribution of σ as a Gibbs step
 
 # Arguments
 - `θ::Real`: shape parameter, θ ≥ 0
-- `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
-- `β::Array{<:Real, 1}`: coefficient vector
+- `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
+- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
+- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 """
-function sampleσ(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, θ::Real)
+function sampleσ(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real)
     n, _ = validateParams(X, y, β, α, θ)
     z = y - X*β
-    pos = findall(z .> 0)
-    b = (δ(α, θ) * sum(abs.(z[Not(pos)]).^θ) / α^θ) + (δ(α, θ) * sum(abs.(z[pos]).^θ) / (1-α)^θ)
+    b = (δ(α, θ) * sum((.-z[z.<0]).^θ) / α^θ) + (δ(α, θ) * sum(z[z.>=0].^θ) / (1-α)^θ)
     return rand(InverseGamma(n/θ, b), 1)[1]
 end
 
@@ -133,44 +134,21 @@ end
 Computes log of the conditional distribution of β with X being a n × p matrix
 
 # Arguments
-- `β::Array{<:Real, 1}`: coefficient vector
-- `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
+- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
+- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
-- `λ::Array{Real, 1}`: Horse-shoe hyper-parameter
+- `λ::Union{SVector, Array{<:Real, 1}}`: Horse-shoe hyper-parameter
 """
-function logβCond(β::Array{<:Real, 1}, X::Array{<:Real, 2}, y::Array{<:Real, 1}, α::Real, θ::Real,
-        σ::Real, τ::Real, λ::Array{<:Real, 1})
+function logβCond(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real,
+        σ::Real, τ::Real, λ::MixedVec)
     z = y - X*β
     pos = findall(z .> 0)
-    b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
+    b = δ(α, θ)/σ * (sum((.-z[z.< 0]).^θ) / α^θ + sum(z[z.>=0].^θ) / (1-α)^θ)
     return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
-end
-
-"""
-    logβCond(β, X, y, α, θ, σ, τ, λ)
-
-Computes log of the conditional distribution of β with X being a n × 1 vector
-
-# Arguments
-- `β::Real`: coefficient, β ∈ ℜ
-- `X::Array{<:Real, 1}`: vector of independent variable
-- `y::Array{<:Real, 1}`: dependent variable
-- `α::Real`: Asymmetry parameter, α ∈ (0,1)
-- `θ::Real`: shape parameter, θ ≥ 0
-- `σ::Real`: scale parameter, σ ≥ 0
-- `τ::Real`: scale of π(β), τ ≥ 0
-- `λ::Real`: Horse-shoe hyper-parameter
-"""
-function logβCond(β::Real, X::Array{<:Real, 1}, y::Array{<:Real, 1}, α::Real, θ::Real,
-        σ::Real, τ::Real, λ::Real)
-    z = y - X*β
-    pos = findall(z .> 0)
-    b = δ(α, θ)/σ * (sum(abs.(z[Not(pos)]).^θ) / α^θ + sum(abs.(z[pos]).^θ) / (1-α)^θ)
-    return -b -1/(2*(τ*λ)^2) * β^2
 end
 
 """
@@ -182,27 +160,33 @@ Computes
 ```
 
 # Arguments
-- `β::Array{<:Real, 1}`: coefficient vector
-- `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
+- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
+- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
-- `λ::Array{<:Real, 1}`: Horse-shoe hyper-parameter
+- `λ::Union{SVector, Array{<:Real, 1}}`: Horse-shoe hyper-parameter
 """
-function ∇ᵦ(β::Array{<:Real, 1}, X::Array{<:Real, 2}, y::Array{<:Real, 1}, α::Real, θ::Real, σ::Real,
-        τ::Real, λ::Array{<:Real, 1})
-    z = y - X*β
-    posId = findall(z.>0)
-    p=length(β)
-    ∇ = zeros(p)
+function ∇ᵦ(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
+    z = y - X*β # z will be SArray, not MArray
+    p = length(β)
+    ∇ = MVector{p}(zeros(p))
     for k in 1:p
-        ℓ₁ = θ/α^θ * sum(abs.(z[Not(posId)]).^(θ-1) .* X[Not(posId), k])
-        ℓ₂ = θ/(1-α)^θ * sum(z[posId].^(θ-1) .* X[posId, k])
-        ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/(τ^2 * λ[k]^2)
+        inner∇ᵦ!(∇, β, k, z, X, α, θ, σ, τ, λ)
     end
     return ∇
+end
+"""
+Helper function for ∇ᵦ
+"""
+function inner∇ᵦ!(∇::MVector, β::MixedVec, k::Int, z::MixedVec,
+        X::MixedMat, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
+    ℓ₁ = θ/α^θ * sum((.-z[z.<0]).^(θ-1) .* X[z.<0, k])
+    ℓ₂ = θ/(1-α)^θ * sum(z[z.>=0].^(θ-1) .* X[z.>=0, k])
+    ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/((τ*λ[k])^2)
+    nothing
 end
 
 """
@@ -263,24 +247,19 @@ Samples β using via MALA-MH
 - `τ::Real`: scale of π(β), τ ≥ 0
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function sampleβ(β::Array{<:Real, 1}, ε::Union{Real, Array{<:Real, 1}},  X::Array{<:Real, 2},
-        y::Array{<:Real, 1}, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true)
-    _, p = validateParams(X, y, β, ε, α, θ, σ)
+function sampleβ(β::MixedVec, ε::Union{Real, MixedVec},  X::MixedMat,
+        y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true)
+    # _, p = validateParams(X, y, β, ε, α, θ, σ)
+    λ = abs.(rand(Cauchy(0,1), length(β)))
     if MALA
-        λ = abs.(rand(Cauchy(0,1), p))
         ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
         prop = rand(MvNormal(β + ε.^2 ./ 2 .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
     else
         prop = vec(rand(MvNormal(β, typeof(ε) <: Real ? ε : diagm(ε))), 1)
     end
-    λ = abs.(rand(Cauchy(0,1), p))
-    ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
-
-    α₁ = logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ)
-    α₁ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
+    logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ) >
+        log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
-
-InitParam = Union{Real, Array{<:Real, 1}, Nothing}
 
 """
     MCMC(Params)
@@ -298,19 +277,36 @@ MCMC algorithm for the the AEPD with known α
 - `θ₁::Real`: Initial value for θ
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function MCMC(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Union{Real, Array{<:Real, 1}} = 0.01,
-        β₁::InitParam = nothing, σ₁::Real = 1, θ₁::Real = 1, MALA = true)
+function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Union{Real, Array{<:Real, 1}} = 0.01,
+        β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1, MALA::Bool = true)
     # TODO: validation
     n, p = size(params.X)
-    β, σ, θ = zeros(params.nMCMC, p), zeros(params.nMCMC), zeros(params.nMCMC)
+    β = zeros(params.nMCMC, p)
+    σ = zeros(params.nMCMC)
+    θ = similar(σ)
     β[1,:] = typeof(β₁) <: Nothing ? inv(X'*X)*X'*y : β₁
     σ[1], θ[1] = σ₁, θ₁
 
-    @showprogress 1 "Sampling..." for i in 2:params.nMCMC
+    p = Progress(params.nMCMC-1, dt=0.5,
+        barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
+        barlen=50, color=:yellow)
+
+    for i ∈ 2:params.nMCMC
+        next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
+        mcmcInner!(θ, σ, β, i, params, ε, εᵦ, α, τ, MALA)
+    end
+    return mcmcThin(θ, σ, β, params)
+end
+
+function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i::Int, params::MCMCparams, ε::Real,
+    εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, τ::Real, MALA::Bool)
         θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, ε)
         σ[i] = sampleσ(params.X, params.y, β[i-1,:], α, θ[i])
         β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, params.y, α, θ[i], σ[i], τ, MALA)
-    end
+        nothing
+end
+
+function mcmcThin(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::Array{<:Real, 2}, params::MCMCparams) where {M <: MVector, A <: MArray}
     thin = ((params.burnIn:params.nMCMC) .% params.thin) .=== 0
 
     β = (β[params.burnIn:params.nMCMC,:])[thin,:]
@@ -318,4 +314,5 @@ function MCMC(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Un
     σ = (σ[params.burnIn:params.nMCMC])[thin]
     return β, θ, σ
 end
+
 end

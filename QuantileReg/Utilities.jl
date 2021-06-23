@@ -1,6 +1,13 @@
-module Validation
+module Utilities
 
-export validateParams
+export validateParams, MCMCparams, MixedVec, MixedMat
+
+using StaticArrays
+
+MixedVec = Union{SVector, Array{<:Real, 1}}
+MixedMat = Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}
+ParamReal = Union{MVector, Real}
+ParamVec = Union{MVector, Array{<:Real, 1}}
 
 """
     validateParams(α, θ)
@@ -17,7 +24,7 @@ function validateParams(α::Real, θ::Real)
     return nothing
 end
 
-function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, θ::Real)
+function validateParams(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real)
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
     p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
@@ -27,7 +34,7 @@ function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Re
     return n, p
 end
 
-function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, θ::Real, σ::Real)
+function validateParams(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real)
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
     p == length(β) || throw(DomainError("ncol of X not equal to length of β"))
@@ -38,7 +45,7 @@ function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Re
     return n, p
 end
 
-function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1},
+function validateParams(X::MixedMat, y::MixedVec, β::MixedVec,
         εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, θ::Real, σ::Real)
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))
@@ -55,7 +62,7 @@ function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Re
     return n, p
 end
 
-function validateParams(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, ε::Real,
+function validateParams(X::MixedMat, y::MixedVec, β::MixedVec, ε::Real,
         εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, θ::Real, σ::Real)
     n, p = size(X)
     n == length(y) || throw(DomainError("nrow of X not equal to length of y"))

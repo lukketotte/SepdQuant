@@ -119,10 +119,10 @@ par = MCMCparams(y, X, 500000, 10, 200000)
 β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.00071, nothing, 3., .8) # MH step
 β, θ, σ = mcmc(par, 0.5, 100., 0.05, nothing, 3., .8) # using scale mixture
 
-plot(β[:,11])
+plot(β[:,3])
 plot(σ)
 plot(θ)
 plot(cumsum(θ)./(1:length(θ)))
-plot(cumsum(β[:,12])./(1:length(θ)))
+plot(cumsum(β[:,14])./(1:length(θ)))
 
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)

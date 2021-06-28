@@ -7,6 +7,9 @@ include("Utilities.jl")
 using .Utilities
 
 abstract type MCMCAbstractType end
+"""
+Only use static arrays for small y, X and nMCMC. 
+"""
 mutable struct MCMCparams <: MCMCAbstractType
     y::MixedVec
     X::MixedMat

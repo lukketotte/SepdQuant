@@ -5,6 +5,24 @@ using .AEPD, .QuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, KernelDensity, CSVFiles
 theme(:juno)
+## Sampling with the mixture representation is very slow
+function sampleLatent(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real)
+    n = length(y)
+    u₁, u₂ = zeros(n), zeros(n)
+    μ = X*β
+    for i ∈ 1:n
+        if y[i] <= μ[i]
+            l = ((μ[i] - y[i]) / (σ^(1/θ) * α))^θ
+            u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
+        else
+            l = ((y[i] - μ[i]) / (σ^(1/θ) * (1-α)))^θ
+            u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
+        end
+    end
+    return u₁, u₂
+end
+
+@time sampleLatent(X, y, β, α, θ, σ)
 
 ## test
 n = 1000;
@@ -98,11 +116,13 @@ X = dat[!, Not(:medv)] |> Matrix
 # X = hcat([1 for i in 1:length(y)], X)
 
 par = MCMCparams(y, X, 500000, 10, 200000)
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.00071, nothing, 3., .8)
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.00071, nothing, 3., .8) # MH step
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, nothing, 3., .8) # using scale mixture
 
-plot(β[:,6])
+plot(β[:,11])
 plot(σ)
 plot(θ)
 plot(cumsum(θ)./(1:length(θ)))
+plot(cumsum(β[:,12])./(1:length(θ)))
 
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)

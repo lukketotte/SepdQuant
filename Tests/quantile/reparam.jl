@@ -13,10 +13,10 @@ n = 1000;
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
-par = MCMCparams(y, X, 50000, 5, 1000)
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, [0.05, 0.001], [2.1, 0.8], 2., 1.)
+par = MCMCparams(y, X, 10000, 1, 1000)
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, [2.1, 0.8], 2., 1.)
 
-plot(β[:,1])
+plot(β[:,2])
 plot(θ, label="θ")
 plot(σ, label="σ")
 

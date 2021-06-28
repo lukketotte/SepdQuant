@@ -48,7 +48,7 @@ Samples latent u₁ and u₂ based on the uniform mixture
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 """
-function sampleLatent(X::Array{<:Real, 2}, y::Array{<:Real, 1}, β::Array{<:Real, 1}, α::Real, θ::Real, σ::Real)
+function sampleLatent(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real)
     n, p = validateParams(X, y, β, α, θ, σ)
     u₁, u₂ = zeros(n), zeros(n)
     μ = X*β
@@ -205,8 +205,8 @@ Samples β using latent u₁ and u₂ via Gibbs
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
 """
-function sampleβ(X::Array{<:Real, 2}, y::Array{<:Real, 1}, u₁::Array{<:Real, 1}, u₂::Array{<:Real, 1},
-    β::Array{<:Real, 1}, α::Real, θ::Real, σ::Real, τ::Real)
+function sampleβ(X::MixedMat, y::MixedVec, u₁::MixedVec, u₂::MixedVec,
+    β::MixedVec, α::Real, θ::Real, σ::Real, τ::Real)
     n, p = validateParams(X, y, β, α, θ, σ)
     βsim = zeros(p)
     for k in 1:p
@@ -264,7 +264,8 @@ end
 """
     MCMC(Params)
 
-MCMC algorithm for the the AEPD with known α
+MCMC algorithm for the the AEPD with known α not using the uniform scale mixture representation. Uses the
+Uniform(0,1) transformation for params.y <: Integer to ensure the quantiles are continuous.
 
 # Arguments
 - `params <: MCMCAbstractType`: struct with all settings for sampler
@@ -277,7 +278,7 @@ MCMC algorithm for the the AEPD with known α
 - `θ₁::Real`: Initial value for θ
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Union{Real, Array{<:Real, 1}} = 0.01,
+function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real, εᵦ::Union{Real, Array{<:Real, 1}},
         β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1, MALA::Bool = true)
     # TODO: validation
     n, p = size(params.X)
@@ -293,7 +294,45 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real = 0.05, εᵦ::Un
 
     for i ∈ 2:params.nMCMC
         next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
-        mcmcInner!(θ, σ, β, i, params, ε, εᵦ, α, τ, MALA)
+        mcmcInner!(θ, σ, β, i, params, ε, εᵦ, α, τ)
+    end
+    return mcmcThin(θ, σ, β, params)
+end
+
+"""
+    MCMC(Params)
+
+MCMC algorithm for the the AEPD with known α using the scale mixture representation. Uses the
+Uniform(0,1) transformation for params.y <: Integer to ensure the quantiles are continuous.
+
+# Arguments
+- `params <: MCMCAbstractType`: struct with all settings for sampler
+- `α::Real`: Asymmetry parameter which determines quantile, α ∈ (0,1)
+- `τ::Real`: Hyperparameter for π(β) scale, τ > 0
+- `ε::Real`: Width of proposal interval for MH step for θ, ε > 0
+- `β₁::Union{Real, Array{<:Real, 1}, Nothing}`: Initial value for β
+- `σ₁::Real`: Initial value for σ
+- `θ₁::Real`: Initial value for θ
+- `MALA::Bool`: Set to true for MALA-MH step, false otherwise
+"""
+function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real,
+    β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1,
+    θ₁::Real = 1, MALA::Bool = true)
+    # TODO: validation
+    n, p = size(params.X)
+    β = zeros(params.nMCMC, p)
+    σ = zeros(params.nMCMC)
+    θ = similar(σ)
+    β[1,:] = typeof(β₁) <: Nothing ? inv(params.X'*params.X)*params.X'*params.y : β₁
+    σ[1], θ[1] = σ₁, θ₁
+
+    p = Progress(params.nMCMC-1, dt=0.5,
+        barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
+        barlen=50, color=:yellow)
+
+    for i ∈ 2:params.nMCMC
+        next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
+        mcmcInner!(θ, σ, β, i, params, ε, α, τ, MALA)
     end
     return mcmcThin(θ, σ, β, params)
 end
@@ -306,6 +345,19 @@ function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i:
         θ[i] = sampleθ(θ[i-1], params.X, y, β[i-1,:], α, ε)
         σ[i] = sampleσ(params.X, y, β[i-1,:], α, θ[i])
         β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, y, α, θ[i], σ[i], τ, MALA)
+        nothing
+end
+
+# function sampleβ(X::MixedMat, y::MixedVec, u₁::MixedVec, u₂::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real, τ::Real)
+function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i::Int,
+    params::MCMCparams, ε::Real, α::Real, τ::Real, MALA::Bool)
+        # if y is integer, transform so that the quantiles are continuous
+        y = typeof(params.y[1]) <: Integer ?
+            log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y
+        θ[i] = sampleθ(θ[i-1], params.X, y, β[i-1,:], α, ε)
+        σ[i] = sampleσ(params.X, y, β[i-1,:], α, θ[i])
+        u1, u2 = sampleLatent(params.X, y, β[i-1,:], α, θ[i], σ[i])
+        β[i,:] = sampleβ(params.X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], τ)
         nothing
 end
 

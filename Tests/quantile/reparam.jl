@@ -5,24 +5,6 @@ using .AEPD, .QuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, KernelDensity, CSVFiles
 theme(:juno)
-## Sampling with the mixture representation is very slow
-function sampleLatent(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real)
-    n = length(y)
-    u₁, u₂ = zeros(n), zeros(n)
-    μ = X*β
-    for i ∈ 1:n
-        if y[i] <= μ[i]
-            l = ((μ[i] - y[i]) / (σ^(1/θ) * α))^θ
-            u₁[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
-        else
-            l = ((y[i] - μ[i]) / (σ^(1/θ) * (1-α)))^θ
-            u₂[i] = rand(truncated(Exponential(1/δ(α, θ)), l, Inf), 1)[1]
-        end
-    end
-    return u₁, u₂
-end
-
-@time sampleLatent(X, y, β, α, θ, σ)
 
 ## test
 n = 1000;
@@ -55,74 +37,48 @@ X = X[findall(y.>0),:]
 X = hcat([1 for i in 1:260], X)
 α, n = 0.5, length(y)
 y = trunc.(Int, exp.(y))
-inv(X'*X)*X'*log.(y)
-# y = SArray{n}(y)
-# X = SMatrix{260,10}(X)
 
-typeof(par.y[1]) <: Integer
+# θ stepsizes : (0.5, 0.05), (0.8, ?), (0.2, ?)
 
-par = MCMCparams(log.(y), X, 500000, 20, 100000)
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.0165, nothing, 2., 1.)
+par = MCMCparams(log.(y), X, 500000, 20, 100000);
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.0165, nothing, 2., 1.);
 
-plot(β[:,8])
+par = MCMCparams(log.(y), X, 100000, 1, 1);
+β, θ, σ = mcmc(par, 0.1, 100., 0.1, nothing, .5, .3); # scale mix rep
+
+plot(β[:,10])
 plot(σ)
 plot(θ)
+plot(cumsum(θ)./(1:length(θ)))
+plot(cumsum(σ)./(1:length(θ)))
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
+1-((θ[2:length(θ)] .=== θ[1:(length(θ) - 1)]) |> mean)
 
-βest = []
+βest8 = []
 for b in eachcol(β)
-    append!(βest, median(b))
+    append!(βest8, median(b))
 end
 
-println(βest)
-
-nMCMC = 1000000
-β = zeros(nMCMC, 10)
-β[1,:] = inv(X'*X)*X'*y₁
-σ, θ = zeros(nMCMC), zeros(nMCMC)
-σ[1] = 1.
-θ[1] = 1.
-
-for i ∈ 2:nMCMC
-    if i % 10000 === 0
-        println("iter: ", i)
-    end
-    global y = log.((exp.(y₁) + rand(Uniform(), length(y₁)) .- α))
-    θ[i] = sampleθBlock(θ[i-1], X, y, β[i-1,:], α, 0.05)
-    σ[i] = sampleσBlock(X, y, β[i-1,:], α, θ[i])
-    global u1, u2 = sampleLatentBlock(X, y, β[i-1,:], α, θ[i], σ[i])
-    β[i,:] = sampleβBlock(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 100.)
-end
-
-thin = ((1:nMCMC) .% 20) .=== 0
-plot(θ[thin], label="θ")
-plot(σ[thin], label="σ")
-plot(β[thin,10], label="β")
-
-plot(cumsum(β[:,10]) ./ (1:length(σ)))
-plot(cumsum(θ) ./ (1:length(σ)))
-median(β[thin, 7])
-
-
-p = 10
-b1 = kde(β[thin, p])
-x = range(median(β[thin, p])-1, median(β[thin, p])+1, length = 1000)
-plot(x, pdf(b1, x))
+println(βest8)
 
 ## BostonHousing
 dat = load(string(pwd(), "/Tests/data/BostonHousing.csv")) |> DataFrame
 y = dat[!, "medv"]
 X = dat[!, Not(:medv)] |> Matrix
 # X = hcat([1 for i in 1:length(y)], X)
+# works much better over all α
+# θ stepsizes : (0.5, 0.05), (0.8, 0.05), (0.2, ?)
 
 par = MCMCparams(y, X, 500000, 10, 200000)
 β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.00071, nothing, 3., .8) # MH step
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, nothing, 3., .8) # using scale mixture
 
-plot(β[:,3])
+par = MCMCparams(y, X, 1000000, 10, 200000)
+β, θ, σ = mcmc(par, 0.9, 100., 0.05, nothing, 3., .8) # using scale mixture
+
+plot(β[:,8])
 plot(σ)
 plot(θ)
 plot(cumsum(θ)./(1:length(θ)))
-plot(cumsum(β[:,14])./(1:length(θ)))
+plot(cumsum(β[:,11])./(1:length(θ)))
 
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)

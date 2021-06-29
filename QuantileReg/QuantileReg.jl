@@ -8,7 +8,7 @@ using .Utilities
 
 abstract type MCMCAbstractType end
 """
-Only use static arrays for small y, X and nMCMC. 
+Only use static arrays for small y, X and nMCMC.
 """
 mutable struct MCMCparams <: MCMCAbstractType
     y::MixedVec
@@ -213,7 +213,7 @@ function sampleβ(X::MixedMat, y::MixedVec, u₁::MixedVec, u₂::MixedVec,
     n, p = validateParams(X, y, β, α, θ, σ)
     βsim = zeros(p)
     for k in 1:p
-        l, u = [-Inf], [Inf]
+        l, u = Float64[-Inf], Float64[Inf]
         for i in 1:n
             a = (y[i] - X[i, 1:end .!= k] ⋅  β[1:end .!= k]) / X[i, k]
             b₁ = α*σ^(1/θ)*(u₁[i]^(1/θ)) / X[i, k]
@@ -286,14 +286,13 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real, εᵦ::Union{Rea
     # TODO: validation
     n, p = size(params.X)
     β = zeros(params.nMCMC, p)
-    σ = zeros(params.nMCMC)
-    θ = similar(σ)
+    σ, θ = zeros(params.nMCMC), zeros(params.nMCMC)
     β[1,:] = typeof(β₁) <: Nothing ? inv(params.X'*params.X)*params.X'*params.y : β₁
     σ[1], θ[1] = σ₁, θ₁
 
     p = Progress(params.nMCMC-1, dt=0.5,
         barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
-        barlen=50, color=:yellow)
+        barlen=50, color=:green)
 
     for i ∈ 2:params.nMCMC
         next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
@@ -324,14 +323,13 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real,
     # TODO: validation
     n, p = size(params.X)
     β = zeros(params.nMCMC, p)
-    σ = zeros(params.nMCMC)
-    θ = similar(σ)
+    σ, θ = zeros(params.nMCMC), zeros(params.nMCMC)
     β[1,:] = typeof(β₁) <: Nothing ? inv(params.X'*params.X)*params.X'*params.y : β₁
     σ[1], θ[1] = σ₁, θ₁
 
     p = Progress(params.nMCMC-1, dt=0.5,
         barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
-        barlen=50, color=:yellow)
+        barlen=50, color=:green)
 
     for i ∈ 2:params.nMCMC
         next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])

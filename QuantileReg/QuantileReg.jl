@@ -107,7 +107,7 @@ q(\\theta^*|\\theta) = U(\\max(0, \\theta - \\varepsilon), \\theta + \\varepsilo
 - `ε::Real`: Controls width of propsal interval, ε > 0
 """
 function sampleθ(θ::Real, X::MixedMat, y::MixedVec, β::MixedVec, α::Real, ε::Real)
-    prop = rand(Uniform(maximum([0., θ-ε]), θ + ε), 1)[1]
+    prop = rand(Uniform(maximum([0., θ-ε]), minimum([3., θ + ε])), 1)[1]
     return θBlockCond(prop, X, y, β, α) - θBlockCond(θ, X, y, β, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
@@ -125,7 +125,7 @@ Samples from the marginalized conditional distribution of σ as a Gibbs step
 - `θ::Real`: shape parameter, θ ≥ 0
 """
 function sampleσ(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real)
-    n, _ = validateParams(X, y, β, α, θ)
+    n = length(y)
     z = y - X*β
     b = (δ(α, θ) * sum((.-z[z.<0]).^θ) / α^θ) + (δ(α, θ) * sum(z[z.>=0].^θ) / (1-α)^θ)
     return rand(InverseGamma(n/θ, b), 1)[1]
@@ -315,11 +315,9 @@ Uniform(0,1) transformation for params.y <: Integer to ensure the quantiles are 
 - `β₁::Union{Real, Array{<:Real, 1}, Nothing}`: Initial value for β
 - `σ₁::Real`: Initial value for σ
 - `θ₁::Real`: Initial value for θ
-- `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
 function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real,
-    β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1,
-    θ₁::Real = 1, MALA::Bool = true)
+    β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1)
     # TODO: validation
     n, p = size(params.X)
     β = zeros(params.nMCMC, p)
@@ -333,7 +331,7 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real,
 
     for i ∈ 2:params.nMCMC
         next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
-        mcmcInner!(θ, σ, β, i, params, ε, α, τ, MALA)
+        mcmcInner!(θ, σ, β, i, params, ε, α, τ)
     end
     return mcmcThin(θ, σ, β, params)
 end
@@ -351,7 +349,7 @@ end
 
 # function sampleβ(X::MixedMat, y::MixedVec, u₁::MixedVec, u₂::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real, τ::Real)
 function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i::Int,
-    params::MCMCparams, ε::Real, α::Real, τ::Real, MALA::Bool)
+    params::MCMCparams, ε::Real, α::Real, τ::Real)
         # if y is integer, transform so that the quantiles are continuous
         y = typeof(params.y[1]) <: Integer ?
             log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y

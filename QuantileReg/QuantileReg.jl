@@ -175,11 +175,22 @@ Computes
 function ∇ᵦ(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
     z = y - X*β # z will be SArray, not MArray
     p = length(β)
-    ∇ = MVector{p}(zeros(p))
+    # ∇ = MVector{p}(zeros(p))
+    ∇ = zeros(length(β))
+    for i in 1:length(z)
+        if z[i] < 0
+            ∇ -= ((δ(α,θ)/σ) * (θ/α^θ) * (-z[i])^(θ-1)) .* X[i, :]
+        else
+            ∇ += ((δ(α,θ)/σ) * (θ/(1-α)^θ) * z[i]^(θ-1)).* X[i, :]
+        end
+    end
+
+    """
     for k in 1:p
         inner∇ᵦ!(∇, β, k, z, X, α, θ, σ, τ, λ)
     end
-    return ∇
+    """
+    ∇ - 2/τ^2 * (β' * diagm(1 ./ λ.^2))'
 end
 """
 Helper function for ∇ᵦ
@@ -188,7 +199,7 @@ function inner∇ᵦ!(∇::MVector, β::MixedVec, k::Int, z::MixedVec,
         X::MixedMat, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
     ℓ₁ = θ/α^θ * sum((.-z[z.<0]).^(θ-1) .* X[z.<0, k])
     ℓ₂ = θ/(1-α)^θ * sum(z[z.>=0].^(θ-1) .* X[z.>=0, k])
-    ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/((τ*λ[k])^2)
+    ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - 2*β[k]/((τ*λ[k])^2)
     nothing
 end
 
@@ -258,11 +269,13 @@ function sampleβ(β::MixedVec, ε::Union{Real, MixedVec},  X::MixedMat,
         ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
         prop = rand(MvNormal(β + ε.^2 ./ 2 .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
     else
-        prop = vec(rand(MvNormal(β, typeof(ε) <: Real ? ε : diagm(ε))), 1)
+        prop = vec(rand(MvNormal(β, typeof(ε) <: Real ? ε : diagm(ε)), 1))
     end
     logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ) >
         log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
+
+typeof([1.]) <: AbstractVector
 
 """
     MCMC(Params)
@@ -296,7 +309,7 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real, εᵦ::Union{Rea
 
     for i ∈ 2:params.nMCMC
         next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
-        mcmcInner!(θ, σ, β, i, params, ε, εᵦ, α, τ)
+        mcmcInner!(θ, σ, β, i, params, ε, εᵦ, α, τ, MALA)
     end
     return mcmcThin(θ, σ, β, params)
 end

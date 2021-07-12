@@ -22,6 +22,45 @@ plot(σ, label="σ")
 
 1-((β[2:nMCMC, 1] .=== β[1:(nMCMC - 1), 1]) |> mean)
 1-((b[2:length(o), 1] .=== b[1:(length(o) - 1), 1]) |> mean)
+## New Conflict
+dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
+
+y = dat[:, :osvAll]
+X = dat[:, Not("osvAll")] |> Matrix
+X = X[findall(y.>0),:];
+y = y[y.>0];
+X = hcat([1 for i in 1:length(y)], X);
+
+inv(X'*X)*X'*log.(y)
+
+par = MCMCparams(y, X, 600000, 10, 200000);
+round.(βest, digits = 3) |> println
+β1init = [-1.501, -0.041, -1.615, 1.925, 0.0, 0.461, 1.273, -0.003, 0.216]
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.004, β1init, 2., 1., false);
+
+βest = Float64[]
+for b in eachcol(β2)
+    append!(βest, median(b))
+end
+
+# difficult to sample β properly, mbe MALA
+β2init = [0.015, -0.129, -0.543, 1.209, 0.001, 0.262, 1.612, -0.007, 0.275]
+par = MCMCparams(y, X, 2000000, 20, 1000000);
+β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.004, β2init, 1.5, 1., false);
+
+# using the MALA method
+par = MCMCparams(y, X, 500000, 20, 100000);
+β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.0001, β2init, 1.5, 1., true);
+
+plot(β2[:,3])
+p = 1
+plot(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)), label = "α = 0.9")
+plot(θ2)
+plot(σ2)
+1-((β2[2:length(θ2), 1] .=== β2[1:(length(θ2) - 1), 1]) |> mean)
+
+β3, θ3, σ3 = mcmc(par, 0.1, 100., 0.05, 0.02, inv(X'*X)*X'*log.(y), 2., 1., false);
+
 
 ## Conflict
 dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame;
@@ -29,8 +68,6 @@ cols = [:best_fatality, :foreign_f, :intensity, :pop_dens_ln, :fatality_lag_ln, 
     :territorial, :govtbestfatal_ln];
 dat = dat[:, cols];
 dat = dat[:, Not(filter(c -> count(ismissing, dat[:,c])/size(dat,1) > 0., names(dat)))];
-
-dat[findall(y.>0), "foreign_f"] |> mean
 
 y = Int64.(dat."best_fatality");
 X = Float64.(dat[:, Not("best_fatality")] |> Matrix);
@@ -41,8 +78,31 @@ X = hcat([1 for i in 1:length(y)], X);
 
 
 inv(X'*X)*X'*log.(y)
-par = MCMCparams(log.(y), X, 100000, 1, 20000);
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.0165, inv(X'*X)*X'*log.(y), 2., 1.);
+
+par = MCMCparams(y, X, 300000, 1, 100000);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.02, inv(X'*X)*X'*log.(y), 2., 1., false);
+β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.02, inv(X'*X)*X'*log.(y), 2., 1., false);
+β3, θ3, σ3 = mcmc(par, 0.1, 100., 0.05, 0.02, inv(X'*X)*X'*log.(y), 2., 1., false);
+
+plot(β[:,3])
+plot(θ2)
+
+plot(cumsum(θ1)./(1:length(θ1)), label = "α = 0.5")
+plot!(cumsum(θ2)./(1:length(θ1)), label = "α = 0.9")
+plot!(cumsum(θ3)./(1:length(θ1)), label = "α = 0.1")
+
+p = 1
+plot(1:length(θ), cumsum(β1[:,p])./(1:length(θ)), label = "α = 0.5")
+plot!(1:length(θ), cumsum(β2[:,p])./(1:length(θ)), label = "α = 0.9")
+plot!(1:length(θ), cumsum(β3[:,p])./(1:length(θ)), label = "α = 0.1")
+
+√var(β1[:,p])
+√var(β2[:,p])
+√var(β3[:,p])
+
+1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
+
+
 
 """
 α = 0.1, ε = 0.7
@@ -57,6 +117,7 @@ par = MCMCparams(log.(y), X, 100000, 1, 20000);
 """
 par = MCMCparams(y, X, 200000, 5, 1);
 β, θ, σ = mcmc(par, 0.9, 100., 0.75, βest, 0.154, 0.19); # scale mix rep
+
 
 p = 2
 plot(1:length(θ), β[:,p])

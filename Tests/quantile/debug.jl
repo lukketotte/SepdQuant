@@ -3,33 +3,12 @@ include("QR.jl")
 include("../aepd.jl")
 using .AEPD, .QR
 using Plots, PlotThemes, CSV, DataFrames, StatFiles
+using StaticArrays
 
-
-## Struct test
-struct MCMCparams
-    y::Array{<:Real, 1}
-    X::Array{<:Real, 2}
-    nMCMC::Int
-    thin::Int
-    burnIn::Int
-    ε::Union{Real, Array{<:Real, 1}}
-    Θ::Union{Array{Any, 2}}
-
-    function MCMCparams(y::Array{<:Real, 1}, X::Array{<:Real, 2}, nMCMC::Int,
-            thin::Int, burnIn::Int, ε::Union{Real, Array{<:Real, 1}})
-        new(y, X, nMCMC, thin, burnIn, ε, [[inv(X'*X)*X'*y] [1.] [1.]])
-    end
-
-    function MCMCparams(y::Array{<:Real, 1}, X::Array{<:Real, 2}, nMCMC::Int,
-            thin::Int, burnIn::Int)
-        new(y, X, nMCMC, thin, burnIn, 0.01, [[inv(X'*X)*X'*y] [1.] [1.]])
-    end
-end
-
-@showprogress 1 "Computing..." for i in 1:500000000
-    log(i)
-end
-
+MixedVec = Union{SVector, Array{<:Real, 1}}
+MixedMat = Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}
+ParamReal = Union{MVector, Real}
+ParamVec = Union{MVector, Array{<:Real, 1}}
 
 n = 500;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
@@ -41,52 +20,52 @@ function δ(α::Real, θ::Real)
     return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
 
-function ∇ᵦ(β::AbstractVector, X::AbstractMatrix, y::AbstractVector,
-    α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector)
-    z = y - X*β # z will be SArray, not MArray
+function ∇ᵦ(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
+    z = y - X*β
     p = length(β)
-    ∇ = zeros(p)
-    for k in 1:p
-        inner∇ᵦ!(∇, β, k, z, X, α, θ, σ, τ, λ)
+    ∇ = zeros(length(β))
+    for i in 1:length(z)
+        if z[i] < 0
+            ∇ -= ((δ(α,θ)/σ) * (θ/α^θ) * (-z[i])^(θ-1)) .* X[i, :]
+        else
+            ∇ += ((δ(α,θ)/σ) * (θ/(1-α)^θ) * z[i]^(θ-1)).* X[i, :]
+        end
     end
-    return ∇
+    ∇ - 2/τ^2 * (β' * diagm(1 ./ λ.^2))'
 end
 
-function inner∇ᵦ!(∇::AbstractVector, β::AbstractVector, k::Int, z::AbstractVector,
-        X::AbstractMatrix, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector)
+function inner∇ᵦ!(∇::MVector, β::MixedVec, k::Int, z::MixedVec,
+        X::MixedMat, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
     ℓ₁ = θ/α^θ * sum((.-z[z.<0]).^(θ-1) .* X[z.<0, k])
     ℓ₂ = θ/(1-α)^θ * sum(z[z.>=0].^(θ-1) .* X[z.>=0, k])
-    ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - β[k]/((τ*λ[k])^2)
+    ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - 2*β[k]/((τ*λ[k])^2)
     nothing
+end
+
+function logβCond(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real,
+        σ::Real, τ::Real, λ::MixedVec)
+    z = y - X*β
+    pos = findall(z .> 0)
+    b = δ(α, θ)/σ * (sum((.-z[z.< 0]).^θ) / α^θ + sum(z[z.>=0].^θ) / (1-α)^θ)
+    return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
 end
 
 ∇ᵦ(β, X, y, α, θ, σ, 100, [100., 1.]) |> println
 
-z = y - X*β
-∂L = -(δ(α,θ)/σ) * (θ/α^θ) * sum((.-z[z.<0]).^(θ-1) * X[z.<0, :])
+### MALA
+ε = 0.001
+∇ = ∇ᵦ(β, X, y, α, θ, σ,  100, [100., 1.])
+prop = rand(MvNormal(β + ε .* ∇, 2*ε), 1) |> vec
+# println(∇ᵦ(prop, X, y, α, θ, σ, 100, [100., 1.]))
 
-τ = 100
-sumterm = [0, 0]
-for i in 1:length(z)
-    if z[i] < 0
-        global sumterm -= ((δ(α,θ)/σ) * (θ/α^θ) * (-z[i])^(θ-1)) .* X[i, :]
-    else
-        global sumterm += ((δ(α,θ)/σ) * (θ/(1-α)^θ) * z[i]^(θ-1)).* X[i, :]
-    end
-end
+## HOW IN THE WORLD DOES THE GRADIENT SKYROCKET?
+# println(∇ᵦ([2.1001, 0.8001], X, y, α, θ, σ, 100, [1., 1.]))
 
-sumterm -= 2/τ^2 * (β' * diagm(1 ./ λ.^2))'
-println(sumterm)
 
-λ = [100., 1.]
 
-(β' * diagm(1 ./ λ))'
-
-((δ(α,θ)/σ) * (θ/α^θ) * z[3]^(θ-1)) .* X[3, :]
-
-z
-
-sum((.-z[z.<0]).^(θ-1) * X[z.<0, :])
-
-sumterm + z[1] .* X[1, :]
-z[1] .* X[1, :]
+∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, 100, [100., 1.])
+αᵦ = logβCond(prop, X, y, α, θ, σ, 100, [100., 1.]) - logβCond(β, X, y, α, θ, σ, 100, [100., 1.])
+αᵦ += -sum((β - prop - ε * ∇ₚ).^2)/ (4*ε) + sum((prop - β - ε * ∇).^2)/ (4*ε)
+# αᵦ -= sum((β - prop - ε * ∇ₚ).^2)/ (4*ε) + sum((prop - β - ε * ∇).^2)/ (4*ε)
+# - 1.5181594
+αᵦ > log(rand(Uniform(0,1), 1)[1]) # ? prop : β

@@ -13,15 +13,16 @@ n = 1000;
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
-par = MCMCparams(y, X, 10000, 1, 1000)
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, [2.1, 0.8], 2., 1.)
+par = MCMCparams(y, X, 10000, 1, 1)
+# β, θ, σ = mcmc(par, 0.5, 100., 0.05, [2.1, 0.8], 2., 1.)
 
-plot(β[:,2])
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 5*1e-6, [2.1, 0.8], 2., 1., true);
+
+plot(β[:,1])
 plot(θ, label="θ")
 plot(σ, label="σ")
 
-1-((β[2:nMCMC, 1] .=== β[1:(nMCMC - 1), 1]) |> mean)
-1-((b[2:length(o), 1] .=== b[1:(length(o) - 1), 1]) |> mean)
+1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
 ## New Conflict
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
 
@@ -45,14 +46,14 @@ end
 
 # difficult to sample β properly, mbe MALA
 β2init = [0.015, -0.129, -0.543, 1.209, 0.001, 0.262, 1.612, -0.007, 0.275]
-par = MCMCparams(y, X, 2000000, 20, 1000000);
-β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.004, β2init, 1.5, 1., false);
+par = MCMCparams(y, X, 500000, 20, 1);
+β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.0045, β1init, 1.5, 1., false);
 
 # using the MALA method
 par = MCMCparams(y, X, 200000, 1, 1000);
 β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 1e-10, inv(X'*X)*X'*log.(y), 1.5, 1., true);
 
-plot(β2[:,1])
+plot(β2[:,6])
 p = 1
 plot(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)), label = "α = 0.9")
 plot(θ2)

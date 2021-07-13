@@ -3,7 +3,7 @@ include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
 
-using Plots, PlotThemes, CSV, DataFrames, StatFiles, KernelDensity, CSVFiles
+using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
 ## test
@@ -36,7 +36,7 @@ inv(X'*X)*X'*log.(y)
 par = MCMCparams(y, X, 600000, 10, 200000);
 round.(βest, digits = 3) |> println
 β1init = [-1.501, -0.041, -1.615, 1.925, 0.0, 0.461, 1.273, -0.003, 0.216]
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.004, β1init, 2., 1., false);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.004, inv(X'*X)*X'*log.(y), 2., 1., false);
 
 βest = Float64[]
 for b in eachcol(β2)
@@ -49,10 +49,10 @@ par = MCMCparams(y, X, 2000000, 20, 1000000);
 β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.004, β2init, 1.5, 1., false);
 
 # using the MALA method
-par = MCMCparams(y, X, 500000, 20, 100000);
-β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.0001, β2init, 1.5, 1., true);
+par = MCMCparams(y, X, 200000, 1, 1000);
+β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 1e-10, inv(X'*X)*X'*log.(y), 1.5, 1., true);
 
-plot(β2[:,3])
+plot(β2[:,1])
 p = 1
 plot(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)), label = "α = 0.9")
 plot(θ2)

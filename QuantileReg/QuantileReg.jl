@@ -261,13 +261,31 @@ Samples β using via MALA-MH
 - `τ::Real`: scale of π(β), τ ≥ 0
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
+function sampleβ(β::MixedVec, ε::Real,  X::MixedMat,
+        y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
+    λ = abs.(rand(Cauchy(0,1), length(β)))
+    if MALA
+        ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
+        prop = rand(MvNormal(β + ε .* ∇, 2*ε), 1) |> vec
+        ∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, τ, λ)
+        αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ)
+        αᵦ -= sum((β - prop - ε * ∇ₚ).^2)/ (4*ε) + sum((prop - β - ε * ∇).^2)/ (4*ε)
+        αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
+    else
+        prop = vec(rand(MvNormal(β, typeof(ε) <: Real ? ε : diagm(ε)), 1))
+        logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ) >
+            log(rand(Uniform(0,1), 1)[1]) ? prop : β
+    end
+end
+
+"""
 function sampleβ(β::MixedVec, ε::Union{Real, MixedVec},  X::MixedMat,
         y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true)
     # _, p = validateParams(X, y, β, ε, α, θ, σ)
     λ = abs.(rand(Cauchy(0,1), length(β)))
     if MALA
         ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
-        prop = rand(MvNormal(β + ε.^2 ./ 2 .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
+        prop = rand(MvNormal(β - ε .* ∇, typeof(ε) <: Real ? ε : diagm(ε)), 1) |> vec
     else
         prop = vec(rand(MvNormal(β, typeof(ε) <: Real ? ε : diagm(ε)), 1))
     end
@@ -275,7 +293,7 @@ function sampleβ(β::MixedVec, ε::Union{Real, MixedVec},  X::MixedMat,
         log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
 
-typeof([1.]) <: AbstractVector
+"""
 
 """
     MCMC(Params)

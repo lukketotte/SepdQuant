@@ -16,6 +16,8 @@ n = 500;
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X*β .+ rand(Laplace(0, 1), n)
 
+logpdf(MvNorm(), β)
+
 function δ(α::Real, θ::Real)
     return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end

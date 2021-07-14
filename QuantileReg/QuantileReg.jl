@@ -269,6 +269,8 @@ function sampleβ(β::MixedVec, ε::Real,  X::MixedMat,
         prop = rand(MvNormal(β + ε .* ∇, 2*ε), 1) |> vec
         ∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, τ, λ)
         αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ)
+        αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) + logpdf(MvNormal(β + ε^2/2 * ∇), prop)
+        αᵦ -= logβCond(β, X, y, α, θ, σ, τ, λ) - logpdf(MvNormal(prop + ε^2/2 * ∇ₚ), β)
         αᵦ += -sum((β - prop - ε * ∇ₚ).^2)/ (4*ε) + sum((prop - β - ε * ∇).^2)/ (4*ε)
         αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
     else

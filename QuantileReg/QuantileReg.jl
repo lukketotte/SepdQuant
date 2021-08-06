@@ -265,7 +265,9 @@ Samples β using via MALA-MH
 """
 function sampleβ(β::MixedVec, ε::Real,  X::MixedMat,
         y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
-    λ = abs.(rand(Cauchy(0,1), length(β)))
+    # TODO: don't forget this
+    #λ = abs.(rand(Cauchy(0,1), length(β)))
+    λ = ones(length(β))
     if MALA
         # ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
         ∇ = ∂β(β, X, y, α, θ, σ, τ, λ)

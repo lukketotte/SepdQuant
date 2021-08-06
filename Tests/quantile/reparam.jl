@@ -25,21 +25,23 @@ plot(σ, label="σ")
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
 ## New Conflict
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
-
 y = dat[:, :osvAll]
-X = dat[:, Not("osvAll")] |> Matrix
+X = dat[:, Not(["osvAll", "policeLag", "militaryobserversLag"])] |> Matrix
 X = X[findall(y.>0),:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
+
 inv(X'*X)*X'*log.(y)
 
-par = MCMCparams(y, X, 2000000, 25, 1000000);
+par = MCMCparams(y, X, 300000, 5, 50000);
 round.(βest, digits = 3) |> println
 β1init = [-1.84, -0.07, -2, 2.5, 0.0, 0.51, 1.64, -0.003, 0.18]
 
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0055, β1init, 2., 1., false);
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.001, β1init, 2., 1., true);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0051, inv(X'*X)*X'*log.(y), 2., 1., false);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.00065, βest, 2., 1., true);
+
+βest[1] = -2.
 
 βest = Float64[]
 for b in eachcol(β1)
@@ -47,9 +49,12 @@ for b in eachcol(β1)
 end
 println(βest)
 
-plot(β1[:,4])
+plot(β1[:,1])
 1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
 plot(θ1)
+
+p = 2
+plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)))
 
 # difficult to sample β properly, mbe MALA
 β2init = [0.015, -0.129, -0.543, 1.209, 0.001, 0.262, 1.612, -0.007, 0.275]

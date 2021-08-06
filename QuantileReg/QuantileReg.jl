@@ -263,7 +263,7 @@ Samples β using via MALA-MH
 - `τ::Real`: scale of π(β), τ ≥ 0
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function sampleβ(β::MixedVec, ε::Real,  X::MixedMat,
+function sampleβ(β::MixedVec, ε::Union{Real, Array{<:Real, 1}},  X::MixedMat,
         y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
     # TODO: don't forget this
     #λ = abs.(rand(Cauchy(0,1), length(β)))
@@ -271,11 +271,11 @@ function sampleβ(β::MixedVec, ε::Real,  X::MixedMat,
     if MALA
         # ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
         ∇ = ∂β(β, X, y, α, θ, σ, τ, λ)
-        prop = β + ε^2/2 .* ∇ + ε .* vec(rand(MvNormal(zeros(length(β))), 1))
+        prop = β + ε .^2 / 2 .* ∇ + ε .* vec(rand(MvNormal(zeros(length(β)), 1), 1))
         # ∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, τ, λ)
         ∇ₚ = ∂β(prop, X, y, α, θ, σ, τ, λ)
         αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ)
-        αᵦ += - logpdf(MvNormal(β + ε^2/2 .* ∇, ε), prop) + logpdf(MvNormal(prop + ε^2/2 .* ∇ₚ, ε), β)
+        αᵦ += - logpdf(MvNormal(β + ε .^2 / 2 .* ∇, ε), prop) + logpdf(MvNormal(prop + ε .^2/2 .* ∇ₚ, ε), β)
         αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
     else
         prop = vec(rand(MvNormal(β, ε), 1))

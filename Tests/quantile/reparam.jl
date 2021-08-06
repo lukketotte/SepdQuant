@@ -16,7 +16,7 @@ y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 par = MCMCparams(y, X, 100000, 1, 1)
 # β, θ, σ = mcmc(par, 0.5, 100., 0.05, [2.1, 0.8], 2., 1.)
 
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.0001, [2., 0.7], 2., 1., true);
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, [0.05, 0.012], [2., 0.7], 2., 1., true);
 
 plot(β[:,2])
 plot(θ, label="θ")
@@ -30,18 +30,16 @@ X = dat[:, Not(["osvAll", "policeLag", "militaryobserversLag"])] |> Matrix
 X = X[findall(y.>0),:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
-
+size(X)
 
 inv(X'*X)*X'*log.(y)
 
-par = MCMCparams(y, X, 300000, 5, 50000);
-round.(βest, digits = 3) |> println
-β1init = [-1.84, -0.07, -2, 2.5, 0.0, 0.51, 1.64, -0.003, 0.18]
+par = MCMCparams(y, X, 500000, 4, 100000);
+ε = [0.085, 0.01, 0.00065, 0.012, 0.015, 0.00065, 0.0057]
+
 
 β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0051, inv(X'*X)*X'*log.(y), 2., 1., false);
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.00065, βest, 2., 1., true);
-
-βest[1] = -2.
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
 
 βest = Float64[]
 for b in eachcol(β1)
@@ -49,7 +47,7 @@ for b in eachcol(β1)
 end
 println(βest)
 
-plot(β1[:,1])
+plot(β1[:,5])
 1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
 plot(θ1)
 

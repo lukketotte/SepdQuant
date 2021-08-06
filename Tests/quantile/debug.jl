@@ -44,6 +44,18 @@ function HMC(β::Array{<:Real, 1}, L::Integer, ϵ::Real, X::Array{<:Real, 2}, y:
         rand(Uniform(), 1)[1] < minimum([1,numer/denom]) ? prop : β
 end
 
+∇ = ∂β(β, X, y, α, θ, σ, 100., [1., 1.])
+ε = [0.01, 0.05]
+
+a = vec(rand(MvNormal(zeros(length(β)), 1), 1))
+
+a[1] * ε[1]
+a[2] * ε[2]
+
+ε .* a
+
+β + ε.^2/2 .* ∇ + ε .* a
+
 n = 1000;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.

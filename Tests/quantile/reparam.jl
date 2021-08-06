@@ -34,12 +34,12 @@ X = hcat([1 for i in 1:length(y)], X);
 
 inv(X'*X)*X'*log.(y)
 
-par = MCMCparams(y, X, 1000000, 10, 500000);
+par = MCMCparams(y, X, 2000000, 25, 1000000);
 round.(βest, digits = 3) |> println
 β1init = [-1.84, -0.07, -2, 2.5, 0.0, 0.51, 1.64, -0.003, 0.18]
 
 β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0055, β1init, 2., 1., false);
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0005, β1init, 2., 1., true);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.001, β1init, 2., 1., true);
 
 βest = Float64[]
 for b in eachcol(β1)
@@ -47,7 +47,7 @@ for b in eachcol(β1)
 end
 println(βest)
 
-plot(β1[:,6])
+plot(β1[:,4])
 1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
 plot(θ1)
 

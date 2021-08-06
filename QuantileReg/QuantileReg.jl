@@ -2,7 +2,7 @@ module QuantileReg
 
 export mcmc, MCMCparams
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, StaticArrays
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, StaticArrays, ForwardDiff
 include("Utilities.jl")
 using .Utilities
 
@@ -203,6 +203,8 @@ function inner∇ᵦ!(∇::MVector, β::MixedVec, k::Int, z::MixedVec,
     nothing
 end
 
+∂β(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec) = ForwardDiff.gradient(β -> logβCond(β, X, y, α, θ, σ, τ, λ), β)
+
 """
     sampleβ(X, y, u₁, u₂, β, α, θ, σ)
 
@@ -265,11 +267,13 @@ function sampleβ(β::MixedVec, ε::Real,  X::MixedMat,
         y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
     λ = abs.(rand(Cauchy(0,1), length(β)))
     if MALA
-        ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
-        prop = rand(MvNormal(β + ε .* ∇, 2*ε), 1) |> vec
-        ∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, τ, λ)
+        # ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
+        ∇ = ∂β(β, X, y, α, θ, σ, τ, λ)
+        prop = β + ε^2/2 .* ∇ + ε .* vec(rand(MvNormal(zeros(length(β))), 1))
+        # ∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, τ, λ)
+        ∇ₚ = ∂β(prop, X, y, α, θ, σ, τ, λ)
         αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ)
-        αᵦ += -sum((β - prop - ε * ∇ₚ).^2)/ (4*ε) + sum((prop - β - ε * ∇).^2)/ (4*ε)
+        αᵦ += - logpdf(MvNormal(β + ε^2/2 .* ∇, ε), prop) + logpdf(MvNormal(prop + ε^2/2 .* ∇ₚ, ε), β)
         αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
     else
         prop = vec(rand(MvNormal(β, ε), 1))

@@ -7,18 +7,18 @@ using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
 ## test
-n = 1000;
+n = 500;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
 y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
 
-par = MCMCparams(y, X, 10000, 1, 1)
+par = MCMCparams(y, X, 100000, 1, 1)
 # β, θ, σ = mcmc(par, 0.5, 100., 0.05, [2.1, 0.8], 2., 1.)
 
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, 5*1e-6, [2.1, 0.8], 2., 1., true);
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.0001, [2., 0.7], 2., 1., true);
 
-plot(β[:,1])
+plot(β[:,2])
 plot(θ, label="θ")
 plot(σ, label="σ")
 
@@ -34,15 +34,22 @@ X = hcat([1 for i in 1:length(y)], X);
 
 inv(X'*X)*X'*log.(y)
 
-par = MCMCparams(y, X, 600000, 10, 200000);
+par = MCMCparams(y, X, 1000000, 10, 500000);
 round.(βest, digits = 3) |> println
-β1init = [-1.501, -0.041, -1.615, 1.925, 0.0, 0.461, 1.273, -0.003, 0.216]
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.004, inv(X'*X)*X'*log.(y), 2., 1., false);
+β1init = [-1.84, -0.07, -2, 2.5, 0.0, 0.51, 1.64, -0.003, 0.18]
+
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0055, β1init, 2., 1., false);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0005, β1init, 2., 1., true);
 
 βest = Float64[]
-for b in eachcol(β2)
+for b in eachcol(β1)
     append!(βest, median(b))
 end
+println(βest)
+
+plot(β1[:,6])
+1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
+plot(θ1)
 
 # difficult to sample β properly, mbe MALA
 β2init = [0.015, -0.129, -0.543, 1.209, 0.001, 0.262, 1.612, -0.007, 0.275]

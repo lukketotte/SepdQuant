@@ -30,15 +30,11 @@ X = dat[:, Not(["osvAll", "policeLag", "militaryobserversLag"])] |> Matrix
 X = X[findall(y.>0),:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
-size(X)
 
-inv(X'*X)*X'*log.(y)
-
-par = MCMCparams(y, X, 500000, 4, 100000);
+par = MCMCparams(y, X, 2*500000, 4, 100000);
+ε = [0.09, 0.015, 0.00065, 0.015, 0.015, 0.00065, 0.006] # horse-shoe prior
 ε = [0.085, 0.01, 0.00065, 0.012, 0.015, 0.00065, 0.0057]
-
-
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0051, inv(X'*X)*X'*log.(y), 2., 1., false);
+#β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, 0.0051, inv(X'*X)*X'*log.(y), 2., 1., false);
 β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
 
 βest = Float64[]
@@ -47,31 +43,45 @@ for b in eachcol(β1)
 end
 println(βest)
 
-plot(β1[:,5])
+plot(β1[:,1])
 1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
 plot(θ1)
 
-p = 2
+p = 7
 plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)))
 
 # difficult to sample β properly, mbe MALA
-β2init = [0.015, -0.129, -0.543, 1.209, 0.001, 0.262, 1.612, -0.007, 0.275]
-par = MCMCparams(y, X, 500000, 20, 1);
+par = MCMCparams(y, X, 700000, 4, 100000);
 β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 0.0045, β1init, 1.5, 1., false);
-
 # using the MALA method
-par = MCMCparams(y, X, 200000, 1, 1000);
-β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, 1e-10, inv(X'*X)*X'*log.(y), 1.5, 1., true);
+β2, θ2, σ2 = mcmc(par, 0.9, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 1.5, 1., true);
 
-plot(β2[:,6])
-p = 1
+plot(β2[:,1])
+p = 4
 plot(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)), label = "α = 0.9")
 plot(θ2)
 plot(σ2)
 1-((β2[2:length(θ2), 1] .=== β2[1:(length(θ2) - 1), 1]) |> mean)
 
-β3, θ3, σ3 = mcmc(par, 0.1, 100., 0.05, 0.02, inv(X'*X)*X'*log.(y), 2., 1., false);
+β3, θ3, σ3 = mcmc(par, 0.1, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., false);
+1-((β3[2:length(θ3), 1] .=== β3[1:(length(θ3) - 1), 1]) |> mean)
 
+plot(β3[:,1])
+p = 1
+plot(1:length(θ3), cumsum(β3[:,p])./(1:length(θ3)), label = "α = 0.9")
+plot(θ2)
+plot(σ2)
+
+# compare all
+p = 5
+plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)), label = "α = 0.5")
+plot!(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)), label = "α = 0.9")
+plot!(1:length(θ3), cumsum(β3[:,p])./(1:length(θ3)), label = "α = 0.1")
+
+
+plot(1:length(θ1), cumsum(θ1)./(1:length(θ1)), label = "α = 0.5")
+plot!(1:length(θ2), cumsum(θ2)./(1:length(θ2)), label = "α = 0.9")
+plot!(1:length(θ3), cumsum(θ3)./(1:length(θ3)), label = "α = 0.1")
 
 ## Conflict
 dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame;

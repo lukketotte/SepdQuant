@@ -23,8 +23,9 @@ par = MCMCparams(y, X, 2*500000, 4, 100000);
 
 
 1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
-plot(β1[:,4])
+plot(β1[:,6])
 plot(θ1)
+plot(1:length(θ1), cumsum(θ1)./(1:length(θ1)))
 
 p = 9
 plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)))

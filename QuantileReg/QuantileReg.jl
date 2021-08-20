@@ -190,7 +190,7 @@ function ∇ᵦ(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::
         inner∇ᵦ!(∇, β, k, z, X, α, θ, σ, τ, λ)
     end
     """
-    ∇ - 2/τ^2 * (β' * diagm(1 ./ λ.^2))'
+    ∇ - 1/τ^2 * (β' * diagm(1 ./ λ.^2))'
 end
 """
 Helper function for ∇ᵦ

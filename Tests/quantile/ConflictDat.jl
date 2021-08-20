@@ -1,59 +1,39 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
-include("QR.jl")
-using .QR
-using Plots, PlotThemes, CSV, DataFrames, StatFiles
+include("../aepd.jl")
+include("../../QuantileReg/QuantileReg.jl")
+using .AEPD, .QuantileReg
+
+using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
-# dat = load("C:\\Users\\lukar818\\Documents\\PhD\\SMC\\Tests\\data\\nsa_ff.dta") |> DataFrame
-dat = load(string(pwd(), "/Tests/data/nsa_ff.dta")) |> DataFrame
-dat = dat[:, Not(filter(c -> count(ismissing, dat[:,c])/size(dat,1) > 0.05, names(dat)))]
-dropmissing!(dat)
+dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
+y = dat[:, :osvAll]
 
-y₁ = Float64.(dat."fatality_lag_ln")
-X = Float64.(dat[:, [:intensity, :pop_dens, :foreign_f, :loot, :ethnic]] |> Matrix)
-y₁ = y₁[y₁.>0]
-X = X[findall(y₁.>0),:]
-α, n = 0.5, length(y)
+## All covariates
+X = dat[:, Not(["osvAll"])] |> Matrix
+X = X[findall(y.>0),:];
+y = y[y.>0];
+X = hcat([1 for i in 1:length(y)], X);
 
-nMCMC = 50000
-β = zeros(nMCMC, 5)
-β[1,:] = inv(X'*X)*X'*y₁
-σ, θ = zeros(nMCMC), zeros(nMCMC)
-σ[1] = 1.
-θ[1] = 1.
+names(dat) |> println
 
-# seems like θ goes towards 1 with this sampling order
-for i ∈ 2:nMCMC
-    if i % 5000 === 0
-        println("iter: ", i, " θ = ", round(θ[i-1], digits = 2))
-    end
-    # jittering to make quantiles continuous
-    global y = log.((exp.(y₁) + rand(Uniform(), length(y₁)) .- α))
-    z = y - X*β[i-1,:]
-    pos = findall(z .> 0)
-    # using jacobian u = σ^p https://barumpark.com/blog/2019/Jacobian-Adjustments/
-    b = (δ(α, θ[i-1]) * sum(abs.(z[Not(pos)]).^θ[i-1]) / α^θ[i-1]) + (δ(α, θ[i-1]) * sum(abs.(z[pos]).^θ[i-1]) / (1-α)^θ[i-1])
-    σ[i] = (rand(InverseGamma(n/θ[i-1], b), 1)[1])^(1/θ[i-1])
-    # σ[i] = 1
-    global u1, u2 = sampleLatent(X, y, β[i-1,:], α, θ[i-1], σ[i])
-    try
-        θ[i] = sampleθ(θ[i-1], 1., X, y, u1, u2, β[i-1, :], α, σ[i])
-    catch e
-        if isa(e, ArgumentError)
-            θ[i] = θ[i-1]
-            break
-        else
-            println(e)
-        end
-    end
-    # θ[i] = 2.
-    β[i,:] = sampleβ(X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], 100.)
-end
+par = MCMCparams(y, X, 2*500000, 4, 100000);
+ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
 
-plot(θ)
-plot(β[:, 5])
-plot(σ)
 
-plot(cumsum(σ) ./ (1:nMCMC))
-plot(cumsum(β[:, 5]) ./ (1:nMCMC))
-plot(cumsum(θ) ./ (1:nMCMC))
+1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
+plot(β1[:,4])
+plot(θ1)
+
+p = 9
+plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)))
+
+## Excluding some covariates
+X = dat[:, Not(["osvAll", "policeLag", "militaryobserversLag"])] |> Matrix
+X = hcat([1 for i in 1:length(y)], X);
+y = y[y.>0];
+
+par = MCMCparams(y, X, 500000, 4, 100000);
+ε = [0.09, 0.015, 0.00065, 0.015, 0.015, 0.00065, 0.006]
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);

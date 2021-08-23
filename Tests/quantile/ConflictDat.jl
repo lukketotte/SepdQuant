@@ -60,7 +60,7 @@ p = 7
 βpl7 = plot(α, [median(a[:,p]) for a in β], color = "blue",  legend = false)
 βpl7 = plot!(α, [median(a[:,p]) + √(var(a[:,p])) for a in β], ls=:dash, color="red")
 βpl7 = plot!(α, [median(a[:,p]) - √(var(a[:,p])) for a in β], ls=:dash, color="red")
-βpl7 = ylabel!("lntpop")
+βpl7 = ylabel!("incomp")
 βpl7 = xlabel!("α")
 
 p = 9

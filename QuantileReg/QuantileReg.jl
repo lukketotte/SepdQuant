@@ -85,7 +85,6 @@ Computes the conditional distribution of θ with σ marginalized as
 function θBlockCond(θ::Real, X::MixedMat, y::MixedVec, β::MixedVec, α::Real)
     z  = y-X*β
     n = length(y)
-    pos = findall(z .> 0)
     a = δ(α, θ)*(sum((.-z[z.<0]).^θ)/α^θ + sum(z[z.>=0].^θ)/(1-α)^θ)
     return n/θ * log(δ(α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
 end

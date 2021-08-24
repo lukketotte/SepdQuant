@@ -1,4 +1,5 @@
-using Plots, Formatting, SpecialFunctions
+using Plots, Formatting, SpecialFunctions, EpdTest, Distributions
+
 
 function δ(p, α)
     2*α^p*(1-α)^p / (α^p + (1-α)^p)
@@ -12,7 +13,30 @@ function expTerm(x, α, μ, σ, θ)
     end
 end
 
+## Bivariate
+f(x, y, p) = pdf(MvEpd([0., 0.], 1., p),[x' ; y'])
+x = range(-4, 4, length = 1000)
 
+surface(x, x, f)
+surface(x, x, f.(x', x, 10.))
+plot(x, x, f.(x', x, .1), st=:surface, zlims=(0., 0.3), title="test")
+
+
+
+@userplot MvEpdPlot
+@recipe function p(mvepd::MvEpdPlot)
+    x, p = mvepd.args
+    x, x, f.(x',x,p)
+end
+
+anim = @animate for θ ∈ range(0.1, 5, length = 100)
+    mvepdplot(x, θ, st=:surface,
+    title=string("β = ", round(θ, digits = 3)), zlims=(0., 0.3),
+    c=:thermal, camera=(-30,30))
+end
+gif(anim, "anim_theta.gif", fps = 15)
+
+## Univariate
 @userplot AepdPlot
 @recipe function p(ap::AepdPlot)
     x, μ, σ, θ, α = ap.args
@@ -23,6 +47,7 @@ end
 
 
 x = range(-7, 7, length = 1000)
+
 
 anim = @animate for θ ∈ range(0.1, 5, length = 100)
     aepdplot(x, 0., 1., θ, 0.3,

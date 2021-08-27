@@ -17,15 +17,26 @@ X = hcat([1 for i in 1:length(y)], X);
 
 names(dat) |> println
 
-par = MCMCparams(y, X, 1000000, 4, 100000);
+par = MCMCparams(y, X, 100000, 1, 1);
 ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
 
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
+β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
+β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, inv(X'*X)*X'*log.(y), 1, 1);
+
+
+
+p = 7
+plot(β1[:,p])
+plot!(β2[:,1p])
+
+p = 1
+plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)))
+plot!(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)))
 
 β_01, θ_01, σ_01 = β1, θ1, σ1
 
 1-((β1[2:length(θ1), 1] .=== β1[1:(length(θ1) - 1), 1]) |> mean)
-plot(β1[:,6])
+plot(β1[:,7])
 plot(θ1)
 plot(1:length(θ1), cumsum(θ1)./(1:length(θ1)))
 

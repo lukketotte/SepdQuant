@@ -221,8 +221,8 @@ Samples β using latent u₁ and u₂ via Gibbs
 """
 function sampleβ(X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, u₁::AbstractVector{<:Real}, u₂::AbstractVector{<:Real},
     β::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real)
-    n, p = validateParams(X, y, β, α, θ, σ)
-    βsim = zeros(p)
+    # n, p = validateParams(X, y, β, α, θ, σ)
+    n, p = size(X)
     for k in 1:p
         l, u = Float64[-Inf], Float64[Inf]
         for i in 1:n
@@ -240,9 +240,9 @@ function sampleβ(X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, u₁::Ab
             end
         end
         λ = abs(rand(Cauchy(0 , 1), 1)[1])
-        βsim[k] =  maximum(l) < minimum(u) ? rand(truncated(Normal(0, λ*τ), maximum(l), minimum(u)), 1)[1] : β[k]
+        β[k] =  rand(truncated(Normal(0, λ*τ), maximum(l), minimum(u)), 1)[1]
     end
-    return βsim
+    return β
 end
 
 """

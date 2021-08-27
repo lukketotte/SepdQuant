@@ -23,9 +23,8 @@ end
 
 function pdf(d::aepd, x::Real)
     del = δ(d.p, d.α)
-    a = A(x-d.μ, d.p, d.α)
-    C = del^(1/d.p) / (2^(1/d.p) * gamma(1+1/d.p))
-    d.σ * C * exp(-0.5 * del/a * abs((x - d.μ)/d.σ)^d.p)
+    C = del^(1/d.p) / (gamma(1+1/d.p) * d.σ^(1/d.p))
+    x < d.μ ? C * exp(- del/(d.σ*d.α) * (d.μ-x)^d.p) : C * exp(- del/(d.σ*(1-d.α)) * (x-d.μ)^d.p)
 end
 
 function rand(rng::AbstractRNG, d::aepd)

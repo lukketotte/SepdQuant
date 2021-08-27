@@ -2,22 +2,20 @@ module QuantileReg
 
 export mcmc, MCMCparams
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, StaticArrays, ForwardDiff
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff
 include("Utilities.jl")
 using .Utilities
 
 abstract type MCMCAbstractType end
-"""
-Only use static arrays for small y, X and nMCMC.
-"""
+
 mutable struct MCMCparams <: MCMCAbstractType
-    y::MixedVec
-    X::MixedMat
+    y::AbstractVector{<:Real}
+    X::AbstractMatrix{<:Real}
     nMCMC::Int
     thin::Int
     burnIn::Int
 
-    MCMCparams(y::MixedVec, X::MixedMat, nMCMC::Int, thin::Int, burnIn::Int) = length(y) ==
+    MCMCparams(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, nMCMC::Int, thin::Int, burnIn::Int) = length(y) ==
         size(X)[1] ? new(y, X, nMCMC, thin, burnIn) :
         throw(DomainError("Size of y and X not matching"))
 end
@@ -45,13 +43,14 @@ Samples latent u₁ and u₂ based on the uniform mixture
 
 # Arguments
 - `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
-- `β::Array{<:Real, 1}`: coefficient vector
+- `y::AbstractVector{<:Real}`: dependent variable
+- `β::AbstractVector{<:Real}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 """
-function sampleLatent(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real)
+function sampleLatent(X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, β::AbstractVector{<:Real},
+    α::Real, θ::Real, σ::Real)
     n, p = validateParams(X, y, β, α, θ, σ)
     u₁, u₂ = zeros(n), zeros(n)
     μ = X*β
@@ -78,11 +77,11 @@ Computes the conditional distribution of θ with σ marginalized as
 # Arguments
 - `θ::Real`: shape parameter, θ ≥ 0
 - `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
-- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
-- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `y::Union{SVector, AbstractVector{<:Real}}`: dependent variable
+- `β::Union{SVector, AbstractVector{<:Real}}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 """
-function θBlockCond(θ::Real, X::MixedMat, y::MixedVec, β::MixedVec, α::Real)
+function θBlockCond(θ::Real, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, β::AbstractVector{<:Real}, α::Real)
     z  = y-X*β
     n = length(y)
     a = δ(α, θ)*(sum((.-z[z.<0]).^θ)/α^θ + sum(z[z.>=0].^θ)/(1-α)^θ)
@@ -100,12 +99,12 @@ q(\\theta^*|\\theta) = U(\\max(0, \\theta - \\varepsilon), \\theta + \\varepsilo
 # Arguments
 - `θ::Real`: shape parameter, θ ≥ 0
 - `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
-- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
-- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `y::Union{SVector, AbstractVector{<:Real}}`: dependent variable
+- `β::Union{SVector, AbstractVector{<:Real}}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `ε::Real`: Controls width of propsal interval, ε > 0
 """
-function sampleθ(θ::Real, X::MixedMat, y::MixedVec, β::MixedVec, α::Real, ε::Real)
+function sampleθ(θ::Real, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, β::AbstractVector{<:Real}, α::Real, ε::Real)
     prop = rand(Uniform(maximum([0., θ-ε]), minimum([3., θ + ε])), 1)[1]
     return θBlockCond(prop, X, y, β, α) - θBlockCond(θ, X, y, β, α) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
@@ -118,12 +117,12 @@ Samples from the marginalized conditional distribution of σ as a Gibbs step
 # Arguments
 - `θ::Real`: shape parameter, θ ≥ 0
 - `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
-- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
-- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `y::Union{SVector, AbstractVector{<:Real}}`: dependent variable
+- `β::Union{SVector, AbstractVector{<:Real}}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 """
-function sampleσ(X::MixedMat, y::MixedVec, β::MixedVec, α::Real, θ::Real)
+function sampleσ(X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, β::AbstractVector{<:Real}, α::Real, θ::Real)
     n = length(y)
     z = y - X*β
     b = (δ(α, θ) * sum((.-z[z.<0]).^θ) / α^θ) + (δ(α, θ) * sum(z[z.>=0].^θ) / (1-α)^θ)
@@ -136,17 +135,17 @@ end
 Computes log of the conditional distribution of β with X being a n × p matrix
 
 # Arguments
-- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `β::Union{SVector, AbstractVector{<:Real}}`: coefficient vector
 - `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
-- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
+- `y::Union{SVector, AbstractVector{<:Real}}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
-- `λ::Union{SVector, Array{<:Real, 1}}`: Horse-shoe hyper-parameter
+- `λ::Union{SVector, AbstractVector{<:Real}}`: Horse-shoe hyper-parameter
 """
-function logβCond(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real,
-        σ::Real, τ::Real, λ::MixedVec)
+function logβCond(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, α::Real, θ::Real,
+        σ::Real, τ::Real, λ::AbstractVector{<:Real})
     z = y - X*β
     pos = findall(z .> 0)
     b = δ(α, θ)/σ * (sum((.-z[z.< 0]).^θ) / α^θ + sum(z[z.>=0].^θ) / (1-α)^θ)
@@ -162,19 +161,19 @@ Computes
 ```
 
 # Arguments
-- `β::Union{SVector, Array{<:Real, 1}}`: coefficient vector
+- `β::Union{SVector, AbstractVector{<:Real}}`: coefficient vector
 - `X::Union{SArray{<:Tuple, <:Real}, Array{<:Real, 2}}`: model matrix
-- `y::Union{SVector, Array{<:Real, 1}}`: dependent variable
+- `y::Union{SVector, AbstractVector{<:Real}}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
-- `λ::Union{SVector, Array{<:Real, 1}}`: Horse-shoe hyper-parameter
+- `λ::Union{SVector, AbstractVector{<:Real}}`: Horse-shoe hyper-parameter
 """
-function ∇ᵦ(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
+function ∇ᵦ(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real})
     z = y - X*β # z will be SArray, not MArray
     p = length(β)
-    # ∇ = MVector{p}(zeros(p))
+    # ∇ = AbstractVector{<:Real}{p}(zeros(p))
     ∇ = zeros(length(β))
     for i in 1:length(z)
         if z[i] < 0
@@ -194,15 +193,15 @@ end
 """
 Helper function for ∇ᵦ
 """
-function inner∇ᵦ!(∇::MVector, β::MixedVec, k::Int, z::MixedVec,
-        X::MixedMat, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec)
+function inner∇ᵦ!(∇::AbstractVector{<:Real}, β::AbstractVector{<:Real}, k::Int, z::AbstractVector{<:Real},
+        X::AbstractMatrix{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real})
     ℓ₁ = θ/α^θ * sum((.-z[z.<0]).^(θ-1) .* X[z.<0, k])
     ℓ₂ = θ/(1-α)^θ * sum(z[z.>=0].^(θ-1) .* X[z.>=0, k])
     ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - 2*β[k]/((τ*λ[k])^2)
     nothing
 end
 
-∂β(β::MixedVec, X::MixedMat, y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, λ::MixedVec) = ForwardDiff.gradient(β -> logβCond(β, X, y, α, θ, σ, τ, λ), β)
+∂β(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real}) = ForwardDiff.gradient(β -> logβCond(β, X, y, α, θ, σ, τ, λ), β)
 
 """
     sampleβ(X, y, u₁, u₂, β, α, θ, σ)
@@ -211,17 +210,17 @@ Samples β using latent u₁ and u₂ via Gibbs
 
 # Arguments
 - `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
-- `u₁::Array{<:Real, 1}`: latent variable
-- `u₂::Array{<:Real, 1}`: latent variable
-- `β::Array{<:Real, 1}`: coefficient vector
+- `y::AbstractVector{<:Real}`: dependent variable
+- `u₁::AbstractVector{<:Real}`: latent variable
+- `u₂::AbstractVector{<:Real}`: latent variable
+- `β::AbstractVector{<:Real}`: coefficient vector
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
 """
-function sampleβ(X::MixedMat, y::MixedVec, u₁::MixedVec, u₂::MixedVec,
-    β::MixedVec, α::Real, θ::Real, σ::Real, τ::Real)
+function sampleβ(X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, u₁::AbstractVector{<:Real}, u₂::AbstractVector{<:Real},
+    β::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real)
     n, p = validateParams(X, y, β, α, θ, σ)
     βsim = zeros(p)
     for k in 1:p
@@ -252,18 +251,18 @@ end
 Samples β using via MALA-MH
 
 # Arguments
-- `β::Array{<:Real, 1}`: coefficient vector
-- `ε::Union{Real, Array{<:Real, 1}}`: vector or scalar of propsal variance(s)
+- `β::AbstractVector{<:Real}`: coefficient vector
+- `ε::Union{Real, AbstractVector{<:Real}}`: vector or scalar of propsal variance(s)
 - `X::Array{<:Real, 2}`: model matrix
-- `y::Array{<:Real, 1}`: dependent variable
+- `y::AbstractVector{<:Real}`: dependent variable
 - `α::Real`: Asymmetry parameter, α ∈ (0,1)
 - `θ::Real`: shape parameter, θ ≥ 0
 - `σ::Real`: scale parameter, σ ≥ 0
 - `τ::Real`: scale of π(β), τ ≥ 0
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function sampleβ(β::MixedVec, ε::Union{Real, Array{<:Real, 1}},  X::MixedMat,
-        y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
+function sampleβ(β::AbstractVector{<:Real}, ε::Union{Real, AbstractVector{<:Real}},  X::AbstractMatrix{<:Real},
+        y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
     λ = abs.(rand(Cauchy(0,1), length(β)))
     # λ = ones(length(β))
     if MALA
@@ -283,8 +282,8 @@ function sampleβ(β::MixedVec, ε::Union{Real, Array{<:Real, 1}},  X::MixedMat,
 end
 
 """
-function sampleβ(β::MixedVec, ε::Union{Real, MixedVec},  X::MixedMat,
-        y::MixedVec, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true)
+function sampleβ(β::AbstractVector{<:Real}, ε::Union{Real, AbstractVector{<:Real}},  X::AbstractMatrix{<:Real},
+        y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true)
     # _, p = validateParams(X, y, β, ε, α, θ, σ)
     λ = abs.(rand(Cauchy(0,1), length(β)))
     if MALA
@@ -310,14 +309,14 @@ Uniform(0,1) transformation for params.y <: Integer to ensure the quantiles are 
 - `α::Real`: Asymmetry parameter which determines quantile, α ∈ (0,1)
 - `τ::Real`: Hyperparameter for π(β) scale, τ > 0
 - `ε::Real`: Width of proposal interval for MH step for θ, ε > 0
-- `εᵦ::Union{Real, Array{<:Real, 1}}`: Variance of proposal for MH step for β
-- `β₁::Union{Real, Array{<:Real, 1}, Nothing}`: Initial value for β
+- `εᵦ::Union{Real, AbstractVector{<:Real}}`: Variance of proposal for MH step for β
+- `β₁::Union{Real, AbstractVector{<:Real}, Nothing}`: Initial value for β
 - `σ₁::Real`: Initial value for σ
 - `θ₁::Real`: Initial value for θ
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real, εᵦ::Union{Real, Array{<:Real, 1}},
-        β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1, MALA::Bool = true)
+function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}},
+        β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1, MALA::Bool = true)
     # TODO: validation
     n, p = size(params.X)
     β = zeros(params.nMCMC, p)
@@ -347,12 +346,12 @@ Uniform(0,1) transformation for params.y <: Integer to ensure the quantiles are 
 - `α::Real`: Asymmetry parameter which determines quantile, α ∈ (0,1)
 - `τ::Real`: Hyperparameter for π(β) scale, τ > 0
 - `ε::Real`: Width of proposal interval for MH step for θ, ε > 0
-- `β₁::Union{Real, Array{<:Real, 1}, Nothing}`: Initial value for β
+- `β₁::Union{Real, AbstractVector{<:Real}, Nothing}`: Initial value for β
 - `σ₁::Real`: Initial value for σ
 - `θ₁::Real`: Initial value for θ
 """
 function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real,
-    β₁::Union{MixedVec, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1)
+    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1)
     # TODO: validation
     n, p = size(params.X)
     β = zeros(params.nMCMC, p)
@@ -371,8 +370,8 @@ function mcmc(params::MCMCparams, α::Real, τ::Real, ε::Real,
     return mcmcThin(θ, σ, β, params)
 end
 
-function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i::Int, params::MCMCparams, ε::Real,
-    εᵦ::Union{Real, Array{<:Real, 1}}, α::Real, τ::Real, MALA::Bool)
+function mcmcInner!(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::AbstractMatrix{<:Real}, i::Int, params::MCMCparams, ε::Real,
+    εᵦ::Union{Real, AbstractVector{<:Real}}, α::Real, τ::Real, MALA::Bool)
         # if y is integer, transform so that the quantiles are continuous
         y = typeof(params.y[1]) <: Integer ?
             log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y
@@ -382,8 +381,8 @@ function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i:
         nothing
 end
 
-# function sampleβ(X::MixedMat, y::MixedVec, u₁::MixedVec, u₂::MixedVec, β::MixedVec, α::Real, θ::Real, σ::Real, τ::Real)
-function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i::Int,
+# function sampleβ(X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, u₁::AbstractVector{<:Real}, u₂::AbstractVector{<:Real}, β::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real)
+function mcmcInner!(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::AbstractMatrix{<:Real}, i::Int,
     params::MCMCparams, ε::Real, α::Real, τ::Real)
         # if y is integer, transform so that the quantiles are continuous
         y = typeof(params.y[1]) <: Integer ?
@@ -395,7 +394,7 @@ function mcmcInner!(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::MixedMat, i:
         nothing
 end
 
-function mcmcThin(θ::Array{<:Real, 1}, σ::Array{<:Real, 1}, β::Array{<:Real, 2}, params::MCMCparams) where {M <: MVector, A <: MArray}
+function mcmcThin(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::Array{<:Real, 2}, params::MCMCparams)
     thin = ((params.burnIn:params.nMCMC) .% params.thin) .=== 0
 
     β = (β[params.burnIn:params.nMCMC,:])[thin,:]

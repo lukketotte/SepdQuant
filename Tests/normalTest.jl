@@ -88,56 +88,65 @@ n = 100;
 X = [repeat([1], n) rand(Uniform(10, 20), n) rand(Uniform(-5, 0), n)]
 y = X*β .+ rand(Laplace(0, 1), n)
 
+y = log.(y)
+
+ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
+plot(βs[6,:,T])
+plot(θ[:, T])
+plot(σ[:, T])
 # Testing it out
-N = 200
-T = 300
+N = 2000
+T = 30
+k = 1
 
 σ, θ = zeros(N, T), zeros(N, T);
-βs = zeros(size(X)[2], N, T)
-βs[:,:,1] = reshape(repeat(inv(X'*X)*X'*log.(y), outer = N), (size(X)[2], N))
+βs = zeros(size(X[:, 1:end .!= k])[2], N, T)
+βs[:,:,1] = reshape(repeat(inv(X[:, 1:end .!= k]'*X[:, 1:end .!= k])*X[:, 1:end .!= k]'*y, outer = N), (size(X[:, 1:end .!= k])[2], N))
 σ[:,1] = ones(N);
 θ[:,1] = ones(N);
 
 W = zeros(N, T)
-essRun = zeros(T)
+essRun = zeros(T-1)
 z = ones(T)
-essRun[1] = N
 W[:, 1] .= 1/N
 resampFactor = 0.5
 
-k = 10
-ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
-
 for t in 2:T
     for i in 1:N
-        pr = 1
+        pr = 0
         for j in 1:length(y)
-            pr *= pdf.(aepd(X[j, 1:end .!= k] ⋅ βs[1:end .!= k,i,t-1], σ[i,t-1]^(1/θ[i,t-1]), θ[i,t-1], 0.5), y[j]) ^ (α₁(T, t) - α₁(T, t-1))
+            pr += (α₁(T, t) - α₁(T, t-1)) * logpdf.(aepd(X[j, 1:end .!= k] ⋅ βs[:,i,t-1], σ[i,t-1]^(1/θ[i,t-1]), θ[i,t-1], 0.5), y[j])
         end
-        W[i, t] = W[i, t-1] * pr
+        # W[i, t] = W[i, t-1] * pr
+        W[i, t] = exp(log(W[i, t-1]) + pr)
     end
-    z[t] = sum(W[:, t])
     # normalize weights and calculate ESS
-    W[:, t] = W[:, t] ./ z[t]
-    essRun[t] = 1/sum(W[:,t].^2)
+    z[t] = sum(W[:, t])
+    W[:, t] = W[:, t] ./ sum(W[:, t])
+    essRun[t-1] = 1/sum(W[:,t].^2)
     # check ESS if resampling is necessary
-    if essRun[t] < resampFactor * N
+    if essRun[t-1] < resampFactor * N
         ids = StatsBase.sample(1:N, StatsBase.weights(W[:, t]), N, replace = true)
         W[:,t] .= 1/N
-        βs[1:end .!= k,:,t-1] = βs[1:end .!= k,ids,t-1]
+        βs[:,:,t-1] = βs[:,ids,t-1]
         σ[:, t-1] = σ[ids, t-1]
         θ[:, t-1] = θ[ids, t-1]
     end
     # update parameters
     for i in 1:N
-        βs[1:end .!= k,i,t] = sampleβ(βs[1:end .!= k,i,t-1], ε, X[:, 1:end .!= k], y, 0.5, θ[i, t-1], σ[i, t-1], 100., t, T)
-        σ[i, t] = sampleσ(X[:, 1:end .!= k], y, βs[1:end .!= k,i,t-1], 0.5, θ[i, t-1], t, T)
-        θ[i, t] = sampleθ(θ[i, t-1], X[:, 1:end .!= k], y,  βs[1:end .!= k,i,t-1], 0.5, 0.05, t, T)
+        βs[:,i,t] = sampleβ(βs[:,i,t-1],ε[1:end .!= k], X[:, 1:end .!= k], y, 0.5, θ[i, t-1], σ[i, t-1], 100., t, T)
+        σ[i, t] = sampleσ(X[:, 1:end .!= k], y, βs[:,i,t-1], 0.5, θ[i, t-1], t, T)
+        θ[i, t] = sampleθ(θ[i, t-1], X[:, 1:end .!= k], y,  βs[:,i,t-1], 0.5, 0.05, t, T)
     end
 end
 
+sum(log.(z)) |> println
+
+println(z)
 println(log(prod(z)/N))
 plot(essRun)
+
+(α₁(T, T) - α₁(T, T-1))
 
 ## need a sampler for
 

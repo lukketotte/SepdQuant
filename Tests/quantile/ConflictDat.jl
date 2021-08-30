@@ -21,8 +21,15 @@ par = MCMCparams(y, X, 100000, 1, 1);
 ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
 
 β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
-β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, inv(X'*X)*X'*log.(y), 1, 1);
+# β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, inv(X'*X)*X'*log.(y), 1, 1);
 
+βest = Float64[]
+for b in eachcol(β2)
+    append!(βest, median(b))
+end
+
+median(σ2)
+median(θ2)
 
 
 p = 7

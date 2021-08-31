@@ -15,6 +15,10 @@ function α₁(Tₖ::N, t::N; p::T = 2.) where {N <: Integer, T <: Real}
     (t/Tₖ)^p
 end
 
+1:T
+plot(α₁.(T, 1:T, p = 5 ), xlabel="t", label = "5")
+plot!(α₁.(T, 1:T, p = 2 ), xlabel="t", label = "2")
+
 # πₜ^{2, k}(θₜ)|_{k=1} invariant kernel
 function μ_update(y::Vector{T}, σ::T, μ_0::T, σ_0::T, t::N, Tₖ::N) where {T<: Real, N <: Integer}
     αₜ = α₁(Tₖ, t)
@@ -91,13 +95,13 @@ y = X*β .+ rand(Laplace(0, 1), n)
 y = log.(y)
 
 ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
-plot(βs[6,:,T])
+plot(βs[1,:,T])
 plot(θ[:, T])
 plot(σ[:, T])
 # Testing it out
-N = 2000
-T = 30
-k = 1
+N = 500
+T = 500
+k = 20
 
 σ, θ = zeros(N, T), zeros(N, T);
 βs = zeros(size(X[:, 1:end .!= k])[2], N, T)
@@ -141,11 +145,11 @@ for t in 2:T
 end
 
 sum(log.(z)) |> println
-
-println(z)
-println(log(prod(z)/N))
 plot(essRun)
-
+-1493.09 + 1536.15
+-1493.09 + 1489.5
+-85 + 1651
+- 1454.228 + 1448.57
 (α₁(T, T) - α₁(T, T-1))
 
 ## need a sampler for

@@ -34,7 +34,7 @@ function logpdf(d::aepd, x::Real)
     μ, σ, p, α = params(d)
     del = δ(p, α)
     C = del^(1/p) / (gamma(1+1/p) * σ^(1/p))
-    x < μ ? log(C) - del/(σ*α) * (μ-x)^p : log(C) - del/(σ*(1-α)) * (x-μ)^p
+    x < μ ? log(C) - del/(σ*α^p) * (μ-x)^p : log(C) - del/(σ*(1-α)^p) * (x-μ)^p
 end
 
 pdf(d::aepd, x::Real) = exp(logpdf(d, x))

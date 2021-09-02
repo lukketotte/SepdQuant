@@ -6,7 +6,7 @@ using Plots, PlotThemes
 theme(:juno)
 
 ## helpers
-function α₁(Tₖ::N, t::N; p::T = 7.) where {N <: Integer, T <: Real}
+function α₁(Tₖ::N, t::N; p::T = 5.) where {N <: Integer, T <: Real}
     (t/Tₖ)^p
 end
 
@@ -74,21 +74,24 @@ n = 200;
 X = [repeat([1], n) rand(Uniform(10, 20), n) rand(Uniform(-5, 0), n)]
 y = X*β .+ rand(Laplace(0., 1.), n)
 
+#y = log.(y)
+ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
+ε = [0.1, 0.01, 0.005]
 par = MCMCparams(y, X, 100000, 4, 10000);
-β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, [0.1, 0.01, 0.005], inv(X'*X)*X'*y, 2., 1., true);
-plot(β2[:,2])
+β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*y, 2., 1., false);
+plot(β2[:,3])
+plot(1:length(θ2), cumsum(β2[:,1])./(1:length(θ2)))
 1-((β2[2:length(θ2), 1] .=== β2[1:(length(θ2) - 1), 1]) |> mean)
 #y = log.(y)
 median(β2[:,1])
 median(θ2)
+plot(θ2)
 median(σ2)
 
-ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
-ε = [0.1, 0.01, 0.005]
 # Testing it out
-N = 1000;
-T = 20;
-k = 4;
+N = 2000;
+T = 30;
+k = 30;
 
 σ, θ = zeros(N, T), zeros(N, T);
 βs = zeros(size(X[:, 1:end .!= k])[2], N, T)
@@ -102,6 +105,9 @@ z = ones(T)
 W[:, 1] .= 1/N
 resampFactor = 0.5
 
+# Y = y
+# y = log.(Y + rand(Uniform(), length(Y)) .- 0.5)
+
 for t in 2:T
     for i in 1:N
         pr = 0
@@ -112,8 +118,11 @@ for t in 2:T
     end
     # normalize weights and calculate ESS
     z[t] = sum(W[:, t])
+
+    cess = N*(sum(W[:, t] .* W[:, t-1]))^2 / sum(W[:, t].^2 .* W[:, t-1])
+
     W[:, t] = W[:, t] ./ sum(W[:, t])
-    essRun[t-1] = 1/sum(W[:,t].^2)
+    essRun[t-1] = cess# 1/sum(W[:,t].^2)
     # check ESS if resampling is necessary
     if essRun[t-1] < resampFactor * N
         # ids = StatsBase.sample(1:N, StatsBase.weights(W[:, t]), N, replace = true)
@@ -125,21 +134,35 @@ for t in 2:T
     end
     # update parameters
     for i in 1:N
+        y = log.(Y + rand(Uniform(), length(Y)) .- 0.5)
         θ[i, t] = sampleθ(θ[i, t-1], X[:, 1:end .!= k], y,  βs[:,i,t-1], 0.5, 0.1, t, T)
         σ[i, t] = sampleσ(X[:, 1:end .!= k], y, βs[:,i,t-1], 0.5, θ[i, t], t, T)
-        βs[:,i,t] = sampleβ(βs[:,i,t-1], 2*ε[1:end .!= k], X[:, 1:end .!= k], y, 0.5, θ[i, t], σ[i, t], 100., t, T)
+        βs[:,i,t] = sampleβ(βs[:,i,t-1], 0.0001, X[:, 1:end .!= k], y, 0.5, θ[i, t], σ[i, t], 100., t, T)
     end
 end
 
 sum(log.(z)) |> println
 plot(essRun)
 
-plot(βs[2,:,T])
+[median(βs[i,:,T]) for i in 1:9] |> println
+[median(β2[:,i]) for i in 1:9] |> println
+
+plot(βs[1,:,T])
 plot(θ[:, T])
 plot(σ[:, T])
 median(σ[:,T])
 median(θ[:,T])
 median(βs[1,:,T])
+
+plot(1:N, cumsum(θ[:,T])./(1:N))
+plot!(1:N, cumsum(θ2[1:N])./(1:N))
+
+plot(1:N, cumsum(σ[:,T])./(1:N))
+plot!(1:N, cumsum(σ2[1:N])./(1:N))
+
+p = 3
+plot(1:N, cumsum(βs[p,:,T])./(1:N))
+plot!(1:N, cumsum(β2[1:N, p])./(1:N))
 
 1-((θ[2:N, T] .=== θ[1:(N - 1), T]) |> mean)
 1-((βs[1, 2:N, T] .=== βs[1, 1:(N - 1), T]) |> mean)

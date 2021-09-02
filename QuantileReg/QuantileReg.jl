@@ -147,7 +147,6 @@ Computes log of the conditional distribution of β with X being a n × p matrix
 function logβCond(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, α::Real, θ::Real,
         σ::Real, τ::Real, λ::AbstractVector{<:Real})
     z = y - X*β
-    pos = findall(z .> 0)
     b = δ(α, θ)/σ * (sum((.-z[z.< 0]).^θ) / α^θ + sum(z[z.>=0].^θ) / (1-α)^θ)
     return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
 end
@@ -275,8 +274,8 @@ function sampleβ(β::AbstractVector{<:Real}, ε::Union{Real, AbstractVector{<:R
         αᵦ += - logpdf(MvNormal(β + ε .^2 / 2 .* ∇, ε), prop) + logpdf(MvNormal(prop + ε .^2/2 .* ∇ₚ, ε), β)
         αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
     else
-        prop = vec(rand(MvNormal(β, ε), 1))
-        logβCond(prop, X, y, α, θ, σ, 100., λ) - logβCond(β, X, y, α, θ, σ, 100., λ) >
+        prop = vec(rand(MvNormal(β, typeof(ε) <: AbstractArray ? diagm(ε) : ε), 1))
+        logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ) >
             log(rand(Uniform(0,1), 1)[1]) ? prop : β
     end
 end

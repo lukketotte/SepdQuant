@@ -11,30 +11,23 @@ y = dat[:, :osvAll]
 
 ## All covariates
 X = dat[:, Not(["osvAll"])] |> Matrix
-X = X[findall(y.>0),:];
+X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-names(dat) |> println
+#names(dat) |> println
+#inv(X'*X)*X'*log.(y)
+par = MCMCparams(y, X, 500000, 10, 100000);
+ε = [0.07, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
 
-par = MCMCparams(y, X, 100000, 1, 1);
-ε = [0.09, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
+β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, 0.001, inv(X'*X)*X'*log.(y), 2., 1., false);
 
-β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, ε, inv(X'*X)*X'*log.(y), 2., 1., true);
-# β1, θ1, σ1 = mcmc(par, 0.5, 100., 0.05, inv(X'*X)*X'*log.(y), 1, 1);
+p = 1
+plot(β2[:,p])
+plot!(1:length(θ2), cumsum(β2[:,p])./(1:length(θ2)))
+1-((β2[2:length(θ2), 1] .=== β2[1:(length(θ2) - 1), 1]) |> mean)
 
-βest = Float64[]
-for b in eachcol(β2)
-    append!(βest, median(b))
-end
-
-median(σ2)
-median(θ2)
-
-
-p = 7
-plot(β1[:,p])
-plot!(β2[:,1p])
+[median(β2[:,i]) for i in 1:9] |> println
 
 p = 1
 plot(1:length(θ1), cumsum(β1[:,p])./(1:length(θ1)))

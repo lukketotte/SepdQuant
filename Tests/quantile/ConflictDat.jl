@@ -25,23 +25,20 @@ X = hcat([1 for i in 1:length(y)], X);
 
 #names(dat) |> println
 #inv(X'*X)*X'*log.(y)
-par = MCMCparams(y, X, 200000, 5, 50000);
+par = MCMCparams(y, X, 100000, 5, 50000);
 # ε = [0.07, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
 # ε = 0.5, α = 0.5
 # ε = 0.1?, α = 0.7
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
 #β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, 0.5, inv(X'*X)*X'*log.(y), 2., 1., true);
+β, θ, σ = mcmc(par, 0.9, 100., .8, .25, βinit, 3, 1.5, true);
 
-β, θ, σ = mcmc(par, 0.9, 100., .15, .1, βinit, 3, 1.5, true);
-
-
-p = 4
+p = 1
 plot(β[:,p])
 plot!(1:length(θ), cumsum(β[:,p])./(1:length(θ)))
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
-
 [median(β[:,i]) for i in 1:9] |> println
-
+1-((θ[2:length(θ)] .=== θ[1:(length(θ) - 1), 1]) |> mean)
 plot(θ)
 plot(σ)
 

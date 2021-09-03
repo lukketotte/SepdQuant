@@ -7,18 +7,18 @@ using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
 ## test
-n = 500;
+n = 1000;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
 X = [repeat([1], n) rand(Uniform(10, 20), n)]
-y = X * β .+ rand(aepd(0., σ^(1/θ), θ, α), n);
+y = X * β .+ rand(aepd(0., 1., 1., 0.5), n);
 
-par = MCMCparams(y, X, 100000, 1, 1)
+par = MCMCparams(y, X, 200000, 5, 50000)
 # β, θ, σ = mcmc(par, 0.5, 100., 0.05, [2.1, 0.8], 2., 1.)
 
-β, θ, σ = mcmc(par, 0.5, 100., 0.05, [0.05, 0.012], [2., 0.7], 2., 1., true);
+β, θ, σ = mcmc(par, 0.5, 100., 0.05, 0.005, [2.1, 0.8], 2., 1., true);
 
-plot(β[:,2])
+plot(β[:,1])
 plot(θ, label="θ")
 plot(σ, label="σ")
 

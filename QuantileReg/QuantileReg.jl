@@ -181,26 +181,13 @@ function ∇ᵦ(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::Abstra
             ∇ += ((δ(α,θ)/σ) * (θ/(1-α)^θ) * z[i]^(θ-1)).* X[i, :]
         end
     end
-
-    """
-    for k in 1:p
-        inner∇ᵦ!(∇, β, k, z, X, α, θ, σ, τ, λ)
-    end
-    """
     ∇ - 1/τ^2 * (β' * diagm(1 ./ λ.^2))'
 end
-"""
-Helper function for ∇ᵦ
-"""
-function inner∇ᵦ!(∇::AbstractVector{<:Real}, β::AbstractVector{<:Real}, k::Int, z::AbstractVector{<:Real},
-        X::AbstractMatrix{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real})
-    ℓ₁ = θ/α^θ * sum((.-z[z.<0]).^(θ-1) .* X[z.<0, k])
-    ℓ₂ = θ/(1-α)^θ * sum(z[z.>=0].^(θ-1) .* X[z.>=0, k])
-    ∇[k] = -δ(α,θ)/σ * (ℓ₁ - ℓ₂) - 2*β[k]/((τ*λ[k])^2)
-    nothing
-end
 
+# first derivative
 ∂β(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real}) = ForwardDiff.gradient(β -> logβCond(β, X, y, α, θ, σ, τ, λ), β)
+# -Hessian
+∂β2(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real}) = ForwardDiff.jacobian(β -> -∂β(β, X, y, α, θ, σ, τ, λ), β)
 
 """
     sampleβ(X, y, u₁, u₂, β, α, θ, σ)
@@ -260,18 +247,17 @@ Samples β using via MALA-MH
 - `τ::Real`: scale of π(β), τ ≥ 0
 - `MALA::Bool`: Set to true for MALA-MH step, false otherwise
 """
-function sampleβ(β::AbstractVector{<:Real}, ε::Union{Real, AbstractVector{<:Real}},  X::AbstractMatrix{<:Real},
+function sampleβ(β::AbstractVector{<:Real}, ε::Real,  X::AbstractMatrix{<:Real},
         y::AbstractVector{<:Real}, α::Real, θ::Real, σ::Real, τ::Real, MALA::Bool = true) where {T <: Real}
     λ = abs.(rand(Cauchy(0,1), length(β)))
-    # λ = ones(length(β))
     if MALA
-        # ∇ = ∇ᵦ(β, X, y, α, θ, σ, τ, λ)
         ∇ = ∂β(β, X, y, α, θ, σ, τ, λ)
-        prop = β + ε .^2 / 2 .* ∇ + ε .* vec(rand(MvNormal(zeros(length(β)), 1), 1))
-        # ∇ₚ = ∇ᵦ(prop, X, y, α, θ, σ, τ, λ)
+        H = (∂β2(β, X, y, α, maximum([θ, 1.01]), σ, τ, λ))^(-1) |> Symmetric
+        prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
         ∇ₚ = ∂β(prop, X, y, α, θ, σ, τ, λ)
+        Hₚ = (∂β2(prop, X, y, α, maximum([θ, 1.01]), σ, τ, λ))^(-1) |> Symmetric
         αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ)
-        αᵦ += - logpdf(MvNormal(β + ε .^2 / 2 .* ∇, ε), prop) + logpdf(MvNormal(prop + ε .^2/2 .* ∇ₚ, ε), β)
+        αᵦ += - logpdf(MvNormal(β + ε .^2 / 2 * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * ∇ₚ, ε^2 * Hₚ), β)
         αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
     else
         prop = vec(rand(MvNormal(β, typeof(ε) <: AbstractArray ? diagm(ε) : ε), 1))

@@ -25,12 +25,12 @@ function δ(α::Real, θ::Real)
     return 2*(α*(1-α))^θ / (α^θ + (1-α)^θ)
 end
 
-function θBlockCond(θ::Real, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, β::AbstractVector{<:Real}, α::Real,
-    t::Integer, T::Integer)
+function θBlockCond(θ::Real, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real},
+    β::AbstractVector{<:Real}, α::Real, ϕ::Real)
     z  = y-X*β
     n = length(y)
     a = δ(α, θ)*(sum((.-z[z.<0]).^θ)/α^θ + sum(z[z.>=0].^θ)/(1-α)^θ)
-    return α₁(T,t)*n/θ * log(δ(α, θ))  - α₁(T,t)*n*log(gamma(1+1/θ)) - n*log(α₁(T,t)*a)/θ + loggamma(α₁(T,t)*n/θ)
+    return ϕ*n/θ * log(δ(α, θ))  - ϕ*n*log(gamma(1+1/θ)) - n*log(ϕ*a)/θ + loggamma(ϕ*n/θ)
 end
 
 function sampleθ(θ::Real, X::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, β::AbstractVector{<:Real},

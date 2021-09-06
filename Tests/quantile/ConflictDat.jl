@@ -6,6 +6,10 @@ using .AEPD, .QuantileReg
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:default)
 
+# TODO: marginal effects plot
+# TODO: θᵢ = (2, 5, 6, 7, 9)'ξ
+#      ev. log(brv_AllLag + 1)
+
 n = 500;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.
@@ -23,7 +27,7 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-#names(dat) |> println
+names(dat) |> println
 #inv(X'*X)*X'*log.(y)
 par = MCMCparams(y, X, 100000, 5, 50000);
 # ε = [0.07, 0.02, 0.02, 0.02, 0.00065, 0.02, 0.02, 0.00065, 0.006]
@@ -31,16 +35,28 @@ par = MCMCparams(y, X, 100000, 5, 50000);
 # ε = 0.1?, α = 0.7
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
 #β2, θ2, σ2 = mcmc(par, 0.5, 100., 0.05, 0.5, inv(X'*X)*X'*log.(y), 2., 1., true);
-β, θ, σ = mcmc(par, 0.9, 100., .8, .25, βinit, 3, 1.5, true);
+β, θ, σ = mcmc(par, 0.1, 100., .8, .25, βinit, 3, 1.5, true);
 
-p = 1
+β1, θ1, σ1 = β, θ, σ
+
+p = 2
 plot(β[:,p])
 plot!(1:length(θ), cumsum(β[:,p])./(1:length(θ)))
+plot!(β1[:,p])
+plot!(1:length(θ), cumsum(β1[:,p])./(1:length(θ)))
+
+p = 9
+plot(1:length(θ), cumsum(β2[:,p])./(1:length(θ)), label = "α = 0.1")
+plot!(1:length(θ), cumsum(β[:,p])./(1:length(θ)), label = "α = 0.5")
+plot!(1:length(θ), cumsum(β1[:,p])./(1:length(θ)), label = "α = 0.9")
+
+
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
 [median(β[:,i]) for i in 1:9] |> println
 1-((θ[2:length(θ)] .=== θ[1:(length(θ) - 1), 1]) |> mean)
-plot(θ)
-plot(σ)
+plot(θ, label = "α = 0.5")
+plot!(θ1, label = "α = 0.9")
+plot!(σ, label = "σ")
 
 β_01, θ_01, σ_01 = β1, θ1, σ1
 

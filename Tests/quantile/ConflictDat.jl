@@ -28,7 +28,7 @@ colnames[1] = "intercept"
 
 par = MCMCparams(y, X, 1000, 5, 1);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 0.5, 100., .8, .25, βinit, 3, 1.5, true);
+β, θ, σ = mcmc(par, 0.9, 100., .8, .25, βinit, 3, 1.5, true);
 
 
 

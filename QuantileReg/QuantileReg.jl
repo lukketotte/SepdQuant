@@ -252,10 +252,10 @@ function sampleβ(β::AbstractVector{<:Real}, ε::Real,  X::AbstractMatrix{<:Rea
     λ = abs.(rand(Cauchy(0,1), length(β)))
     if MALA
         ∇ = ∂β(β, X, y, α, θ, σ, τ, λ)
-        H = (∂β2(β, X, y, α, maximum([θ, 1.01]), σ, τ, λ))^(-1) |> Symmetric
+        H = (∂β2(β, X, y, α, maximum([θ, 1.0001]), σ, τ, λ))^(-1) |> Symmetric
         prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
         ∇ₚ = ∂β(prop, X, y, α, θ, σ, τ, λ)
-        Hₚ = (∂β2(prop, X, y, α, maximum([θ, 1.01]), σ, τ, λ))^(-1) |> Symmetric
+        Hₚ = (∂β2(prop, X, y, α, maximum([θ, 1.0001]), σ, τ, λ))^(-1) |> Symmetric
         αᵦ = logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ)
         αᵦ += - logpdf(MvNormal(β + ε .^2 / 2 * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * ∇ₚ, ε^2 * Hₚ), β)
         αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
@@ -358,11 +358,11 @@ end
 function mcmcInner!(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::AbstractMatrix{<:Real}, i::Int, params::MCMCparams, ε::Real,
     εᵦ::Union{Real, AbstractVector{<:Real}}, α::Real, τ::Real, MALA::Bool)
         # if y is integer, transform so that the quantiles are continuous
-        y = typeof(params.y[1]) <: Integer ?
-            log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y
-        θ[i] = sampleθ(θ[i-1], params.X, y, β[i-1,:], α, ε)
-        σ[i] = sampleσ(params.X, y, β[i-1,:], α, θ[i])
-        β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, y, α, θ[i], σ[i], τ, MALA)
+        """y = typeof(params.y[1]) <: Integer ?
+            log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y"""
+        θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, ε)
+        σ[i] = sampleσ(params.X, params.y, β[i-1,:], α, θ[i])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, params.X, params.y, α, θ[i], σ[i], τ, MALA)
         nothing
 end
 
@@ -370,12 +370,12 @@ end
 function mcmcInner!(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::AbstractMatrix{<:Real}, i::Int,
     params::MCMCparams, ε::Real, α::Real, τ::Real)
         # if y is integer, transform so that the quantiles are continuous
-        y = typeof(params.y[1]) <: Integer ?
-            log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y
-        θ[i] = sampleθ(θ[i-1], params.X, y, β[i-1,:], α, ε)
-        σ[i] = sampleσ(params.X, y, β[i-1,:], α, θ[i])
-        u1, u2 = sampleLatent(params.X, y, β[i-1,:], α, θ[i], σ[i])
-        β[i,:] = sampleβ(params.X, y, u1, u2, β[i-1,:], α, θ[i], σ[i], τ)
+        """y = typeof(params.y[1]) <: Integer ?
+            log.(params.y + rand(Uniform(), length(params.y)) .- α) : params.y"""
+        θ[i] = sampleθ(θ[i-1], params.X, params.y, β[i-1,:], α, ε)
+        σ[i] = sampleσ(params.X, params.y, β[i-1,:], α, θ[i])
+        u1, u2 = sampleLatent(params.X, params.y, β[i-1,:], α, θ[i], σ[i])
+        β[i,:] = sampleβ(params.X, params.y, u1, u2, β[i-1,:], α, θ[i], σ[i], τ)
         nothing
 end
 

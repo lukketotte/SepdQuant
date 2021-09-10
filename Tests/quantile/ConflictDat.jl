@@ -5,13 +5,10 @@ using .AEPD, .QuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
+# using Formatting
 
 # TODO: marginal effects plot
 # TODO: θᵢ = (2, 5, 6, 7, 9)'ξ ...ev. log(brv_AllLag + 1)
-
-using Formatting
-fe = FormatExpr("β_{}.csv")
-format(fe, 0.05)
 
 
 ## All covariates
@@ -22,17 +19,19 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = MCMCparams(y, X, 1000, 5, 1);
-α = 0.9
-par = MCMCparams(log.(y + rand(Uniform(), length(y)) .- α), X, 100000, 5, 1);
+par = Sampler(y, X, 0.1, 10000, 5, 1);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, α, 100., .8, .25, βinit, 3, 1.5, true);
+β, θ, σ = mcmc(par, 100., .8, .25, βinit, 0.5, 1.);
+
+#α = 0.9, ε =  0.15
 
 p = 2
-plot(β[:,p])
+plot(β[500:2000, p])
 plot!(1:length(θ), cumsum(β[:,p])./(1:length(θ)))
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
 
+plot(θ)
+plot(σ[500:2000])
 ## Estimate over multiple quantiles
 colnames = names(dat)
 colnames[1] = "intercept"

@@ -1,8 +1,12 @@
-module QuantileReg
-
-export mcmc, Sampler
-
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff
+using CSV, DataFrames, StatFiles, CSVFiles
+
+dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
+y = dat[:, :osvAll]
+X = dat[:, Not(["osvAll"])] |> Matrix
+X = X[y.>0,:];
+y = y[y.>0];
+X = hcat([1 for i in 1:length(y)], X);
 
 struct Sampler{T <: Real, M <: Real, Response <: AbstractVector, ModelMat <: AbstractMatrix}
     y::Response
@@ -81,7 +85,7 @@ function sampleβ(β::AbstractVector{<:Real}, ε::AbstractVector{<:Real},  s::Sa
 end
 
 function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}},
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1; verbose = true)
+    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1)
     n, p = size(s.X)
     σ₁ > 0 || θ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
     β = zeros(s.nMCMC, p)
@@ -89,7 +93,7 @@ function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{
     β[1,:] = typeof(β₁) <: Nothing ? inv(s.X'*s.X)*s.X'*s.y : β₁
     σ[1], θ[1] = σ₁, θ₁
 
-    p = verbose && Progress(s.nMCMC-1, dt=0.5,
+    p = Progress(s.nMCMC-1, dt=0.5,
         barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
         barlen=50, color=:green)
 
@@ -116,4 +120,6 @@ function mcmcThin(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::Ar
     return β, θ, σ
 end
 
-end
+par = Sampler(y, X, 0.2, 10000, 5, 1);
+βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
+β, θ, σ = mcmc(par, 100., .8, .25, βinit, 1., true);

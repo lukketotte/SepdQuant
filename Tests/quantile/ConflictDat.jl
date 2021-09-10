@@ -7,8 +7,7 @@ using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
 # TODO: marginal effects plot
-# TODO: θᵢ = (2, 5, 6, 7, 9)'ξ
-#      ev. log(brv_AllLag + 1)
+# TODO: θᵢ = (2, 5, 6, 7, 9)'ξ ...ev. log(brv_AllLag + 1)
 
 using Formatting
 fe = FormatExpr("β_{}.csv")

@@ -41,13 +41,15 @@ function Hessian(β::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, y::Abstr
 end
 
 
-
-
 β = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
 α, θ, σ, τ = 0.99, 1.5, 12.5, 100
 ε = 0.1
 
 
 λ = abs.(rand(Cauchy(0,1), length(β)))
-H = (∂β2(β, X, log.(y), α, .7, σ, τ, λ))^(-1) |> Symmetric
+H = (∂β2(β, X, log.(y), α, .7, σ, τ, λ))^(-1)
 Hessian(β, X, log.(y), α, .7, σ, τ, λ)^(-1)
+
+abs.(rand(Cauchy(0,1), 100)) |> mean
+
+rand(truncated(Cauchy(0,1), 0, Inf), 100) |> mean

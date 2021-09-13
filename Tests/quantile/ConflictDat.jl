@@ -19,19 +19,19 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.1, 10000, 5, 1);
+par = Sampler(y, X, 0.9, 20000, 5, 10000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 100., .8, .25, βinit, 0.5, 1.);
+β, θ, σ = mcmc(par, 100., .8, .25, βinit, 0.6, 1.1);
 
 #α = 0.9, ε =  0.15
+#α = 0.1, ε =  0.25
 
 p = 2
-plot(β[500:2000, p])
+plot(β[:, p])
 plot!(1:length(θ), cumsum(β[:,p])./(1:length(θ)))
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
 
 plot(θ)
-plot(σ[500:2000])
 ## Estimate over multiple quantiles
 colnames = names(dat)
 colnames[1] = "intercept"

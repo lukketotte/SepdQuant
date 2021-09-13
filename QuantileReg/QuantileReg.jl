@@ -31,7 +31,6 @@ function δ(α::Real, θ::Real)
 end
 
 function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
-    #y, X, α = param(s)
     z  = s.y-s.X*β
     n = length(z)
     a = δ(s.α, θ)*(sum((.-z[z.<0]).^θ)/s.α^θ + sum(z[z.>=0].^θ)/(1-s.α)^θ)

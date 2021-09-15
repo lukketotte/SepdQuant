@@ -19,7 +19,7 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.5, 100000, 5, 50000);
+par = Sampler(y, X, 0.9, 100000, 5, 50000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
 β, θ, σ = mcmc(par, 100., .8, .25, βinit, 0.6, 1.1);
 
@@ -30,6 +30,9 @@ Integer(round((a/2) * length(b)))
 Integer(round((1-a/2) * length(b)))
 b[250]
 b[9751]
+
+sort(β[:, 2])[250]
+sort(β[:, 2])[9751]
 
 sort!(b)
 n = length(b)

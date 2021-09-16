@@ -19,17 +19,6 @@ function δ(p, α)::Real
     2*α^p*(1-α)^p / (α^p + (1-α)^p)
 end
 
-"""function pdf(d::aepd, x::Real)
-    del = δ(d.p, d.α)
-    C = del^(1/d.p) / (gamma(1+1/d.p) * d.σ^(1/d.p))
-    x < d.μ ? C * exp(- del/(d.σ*d.α) * (d.μ-x)^d.p) : C * exp(- del/(d.σ*(1-d.α)) * (x-d.μ)^d.p)
-end
-
-function logpdf(d::aepd, x::Real)
-    log(pdf(d, x))
-end"""
-
-
 function logpdf(d::aepd, x::Real)
     μ, σ, p, α = params(d)
     del = δ(p, α)

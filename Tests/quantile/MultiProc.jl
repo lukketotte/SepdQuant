@@ -37,13 +37,44 @@ for i in 1:length(α)
     end
 
     a = DataFrame(param = colnames,
-        value =[mean([mean(β[:, j, i]) for i in 1:M]) for j in 1:size(X)[2]],
+        value =[mean([median(β[:, j, i]) for i in 1:M]) for j in 1:size(X)[2]],
         l = [mean([sort(β, dims = 1)[Integer(round((p/2) * N)), j, i] for i in 1:M]) for j in 1:size(X)[2]],
         u =  [mean([sort(β, dims = 1)[Integer(round((1-p/2) * N)), j, i] for i in 1:M]) for j in 1:size(X)[2]], α = α[i])
 
-    b = DataFrame(param = ["sigma", "theta"], value = [mean([mean(σ[:, i]) for i in 1:M]), mean([mean(θ[:, i]) for i in 1:M])],
+    b = DataFrame(param = ["sigma", "theta"], value = [mean([median(σ[:, i]) for i in 1:M]), mean([median(θ[:, i]) for i in 1:M])],
             l = [mean(sort(σ, dims = 1)[Integer(round((p/2) * N)), :]) ; mean(sort(θ, dims = 1)[Integer(round((p/2) * N)), :])],
             u = [mean(sort(σ, dims = 1)[Integer(round((1-p/2) * N)), :]); mean(sort(θ, dims = 1)[Integer(round((1-p/2) * N)), :])], α = α[i])
 
     CSV.write(format(feMCMC, α[i]), vcat(a, b))
 end
+
+M = 10
+β = SharedArray{Float64}((N, size(X)[2], M))
+σ = SharedArray{Float64}((N,M))
+θ = SharedArray{Float64}((N,M))
+@sync @distributed for i = 1:M
+    βt,θt,σt = mcmc(Sampler(y, X, 0.9, 200000, 5, 100000), 100., .8, .25, βinit, 1., 1.)
+    β[:,:,i] = βt
+    θ[:,i] = θt
+    σ[:,i] = σt
+end
+
+a = DataFrame(param = colnames,
+    value =[mean([median(β[:, j, i]) for i in 1:M]) for j in 1:size(X)[2]],
+    l = [mean([sort(β, dims = 1)[Integer(round((p/2) * N)), j, i] for i in 1:M]) for j in 1:size(X)[2]],
+    u =  [mean([sort(β, dims = 1)[Integer(round((1-p/2) * N)), j, i] for i in 1:M]) for j in 1:size(X)[2]], α = 0.9)
+
+b = DataFrame(param = ["sigma", "theta"], value = [mean([median(σ[:, i]) for i in  1:M]), mean([median(θ[:, i]) for i in 1:M])],
+        l = [mean(sort(σ, dims = 1)[Integer(round((p/2) * N)), :]) ; mean(sort(θ, dims = 1)[Integer(round((p/2) * N)), :])],
+        u = [mean(sort(σ, dims = 1)[Integer(round((1-p/2) * N)), :]); mean(sort(θ, dims = 1)[Integer(round((1-p/2) * N)), :])], α = 0.9)
+
+CSV.write(format(feMCMC, 0.9), vcat(a, b))
+mean(σ)
+
+(1:M)[Not(5)]
+
+[median(σ[:, i]) for i in 1:M]
+[median(θ[:, i]) for i in 1:M]
+
+print(a)
+print(b)

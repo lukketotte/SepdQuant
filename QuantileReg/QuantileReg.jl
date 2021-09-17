@@ -1,8 +1,8 @@
 module QuantileReg
 
-export mcmc, Sampler
+export mcmc, Sampler, bootstrap
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff, QuantileRegressions, Optim, DataFrames
 
 struct Sampler{T <: Real, M <: Real, Response <: AbstractVector, ModelMat <: AbstractMatrix}
     y::Response
@@ -113,6 +113,54 @@ function mcmcThin(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::Ar
     θ = (θ[s.burnIn:s.nMCMC])[thin]
     σ = (σ[s.burnIn:s.nMCMC])[thin]
     return β, θ, σ
+end
+
+## Frequentist methods
+function σhat(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, β::AbstractVector{<:Real}, θ::Real, α::Real)
+    z  = y-X*β
+    θ / length(z) * δ(α, θ)*(sum((.-z[z.<0]).^θ)/α^θ + sum(z[z.>=0].^θ)/(1-α)^θ)
+end
+
+function Q(θ::Real, β::AbstractVector{<:Real}, y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real)
+    θ = exp(θ)
+    z  = y-X*β
+    a = sum((.-z[z.<0]).^θ)/α^θ + sum(z[z.>=0].^θ)/(1-α)^θ
+    d = δ(α,θ)
+    log(d)/θ - 1/θ*log((θ*d*a)/length(z)) - loggamma(1+1/θ) - 1/θ
+end
+
+function bootstrap(ϑ::Real, y::AbstractVector{<:Integer},  X::AbstractMatrix{<:Real}, α::Real, N::Integer)
+    θ = zeros(N)
+    β = zeros(N, size(X)[2])
+    σ = zeros(N)
+    p = Progress(N, dt=0.5,
+        barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
+        barlen=50, color=:green)
+    for i in 1:N
+        next!(p)
+        bootstrapUpdate!(θ, σ, β, y, X, ϑ, α, i)
+    end
+    β[θ .> 0.3,:], θ[θ .> 0.3], σ[θ .> 0.3]
+end
+
+function bootstrapUpdate!(θ::AbstractVector{T}, σ::AbstractVector{T}, β::AbstractMatrix{T},
+    y::AbstractVector{<:Integer}, X::AbstractMatrix{T},  θ₀::Real, α::Real, pos::Integer) where {T<:Real}
+    ys = log.(y[sample(1:length(y), length(y))] + rand(Uniform(), length(y)) .- α)
+    #ϑ = repeat([θ₀], size(X)[2] + 1)
+    #ϑ[2:(size(X)[2] + 1)] = coef(qreg(@formula(y ~ x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9), hcat(DataFrame(y = ys), DataFrame(X, :auto)), α))
+    optimFunc = TwiceDifferentiable(vars -> -Q(vars[1], vars[2:(size(X)[2]+1)], ys, X, α), zeros(size(X)[2] + 1), autodiff =:forward)
+    try
+        optimum = optimize(optimFunc, zeros(size(X)[2] + 1))
+        vals = Optim.minimizer(optimum)
+        θ[pos] = exp(vals[1])
+        β[pos,:] = vals[2:length(vals)]
+        σ[pos] = σhat(ys, X, β[pos,:], θ[pos], α)
+    catch e
+        θ[pos] = 0.
+        β[pos,:] = repeat([0.], size(X)[2])
+        σ[pos] = 0.
+    end
+    return nothing
 end
 
 end

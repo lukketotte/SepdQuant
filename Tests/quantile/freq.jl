@@ -32,17 +32,41 @@ function Q(θ::Real, β::AbstractVector{<:Real}, y::AbstractVector{<:Real}, X::A
     log(d)/θ - 1/θ*log((θ*d*a)/length(z)) - loggamma(1+1/θ) - 1/θ
 end
 
-# gives simiar results
-α = .1
+α = 0.9
 ys = log.(y + rand(Uniform(), length(y)) .- α)
+η = zeros(10)
+#η[1] = log(1)
+#η[2:10] = coef(qreg(@formula(y ~ x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9), hcat(DataFrame(y = ys), DataFrame(X, :auto)), α))
 optimFunc = TwiceDifferentiable(vars -> -Q(vars[1], vars[2:(size(X)[2]+1)], ys, X, α), zeros(size(X)[2] + 1), autodiff =:forward)
 optimum = optimize(optimFunc, zeros(size(X)[2] + 1))
+Optim.minimizer(optimum)
+exp(0.173)
+b, _, _ = bootstrap(log(3), y, X, α, 1000)
+[mean(b[:,i]) for i in 1:9]
+
+sort(b, dims = 1)[Integer(round((0.05/2) * 1000)), 1]
+sort(b, dims = 1)[Integer(round((1-0.05/2) * 1000)), 1]
 
 
-optimum = optimize(optimFunc, [ log(1), -0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28])
-vals = Optim.minimizer(optimum)
-exp(vals[1])
-sample(1:length(y), length(y))
+function innerBoot!(θ::AbstractVector{T}, σ::AbstractVector{T}, β::AbstractMatrix{T},
+    y::AbstractVector{<:Integer}, X::AbstractMatrix{T},  θ₀::Real, α::Real, pos::Integer) where {T<:Real}
+    ys = log.(y[sample(1:length(y), length(y))] + rand(Uniform(), length(y)) .- α)
+    ϑ = repeat([θ₀], size(X)[2] + 1)
+    ϑ[2:(size(X)[2] + 1)] = coef(qreg(@formula(y ~ x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9), hcat(DataFrame(y = ys), DataFrame(X, :auto)), α))
+    optimFunc = TwiceDifferentiable(vars -> -Q(vars[1], vars[2:(size(X)[2]+1)], ys, X, α), ϑ, autodiff =:forward)
+    try
+        optimum = optimize(optimFunc, ϑ)
+        vals = Optim.minimizer(optimum)
+        θ[pos] = exp(vals[1])
+        β[pos,:] = vals[2:length(vals)]
+        σ[pos] = σhat(ys, X, β[pos,:], θ[pos], α)
+    catch e
+        θ[pos] = 0
+        β[pos,:] = repeat(0, size(X)[2])
+        σ[pos] = 0
+    end
+    return nothing
+end
 
 function bootstrap(ϑ::Real, y::AbstractVector{<:Integer},  X::AbstractMatrix{<:Real}, α::Real, N::Integer)
     θ = zeros(N)
@@ -51,27 +75,17 @@ function bootstrap(ϑ::Real, y::AbstractVector{<:Integer},  X::AbstractMatrix{<:
     p = Progress(N, dt=0.5,
         barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
         barlen=50, color=:green)
-    ϑ = repeat([ϑ], size(X)[2] + 1)
     for i in 1:N
         next!(p)
-        ys = log.(y[sample(1:length(y), length(y))] + rand(Uniform(), length(y)) .- α)
-        # initial values
-        ϑ[2:(size(X)[2] + 1)] = coef(qreg(@formula(y ~ x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9), hcat(DataFrame(y = ys), DataFrame(X, :auto)), α))
-        optimFunc = TwiceDifferentiable(vars -> -Q(vars[1], vars[2:(size(X)[2]+1)], ys, X, α), ϑ, autodiff =:forward)
-        try
-            optimum = optimize(optimFunc, ϑ)
-            vals = Optim.minimizer(optimum)
-            θ[i] = exp(vals[1])
-            β[i,:] = vals[2:length(vals)]
-            σ[i] = σhat(ys, X, β[i,:], θ[i], α)
-        catch e
-            continue
-        end
+        innerBoot!(θ, σ, β, y, X, ϑ, α, i)
     end
     β[θ .> 0.3,:], θ[θ .> 0.3], σ[θ .> 0.3]
 end
 
-β, θ, σ = bootstrap(log(1), y, X, 0.9, 10000)
+
+
+
+β, θ, σ = bootstrap(log(1), y, X, 0.9, 1000)
 
 median(θ)
 median(σ)

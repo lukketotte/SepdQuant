@@ -7,10 +7,6 @@ using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 # using Formatting
 
-# TODO: marginal effects plot
-# TODO: θᵢ = (2, 5, 6, 7, 9)'ξ ...ev. log(brv_AllLag + 1)
-
-
 ## All covariates
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
 y = dat[:, :osvAll]
@@ -19,16 +15,28 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.5, 100000, 5, 50000);
+par = Sampler(y, X, 0.5, 200000, 20, 60000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 100., .8, .25, βinit, 0.6, 1.1);
-[mean(β[:,i]) for i in 1:9]
+β, θ, σ = mcmc(par, 100., 1., 1.7, βinit, 1.5, 1.1);
+inits = [median(β[:,i]) for i in 1:9]
+##
+using Turing, StatsPlots
+chain = Chains(β, ["intercept";names(dat[:, Not(["osvAll"])])]);
+chain2 = Chains([θ σ], ["θ", "σ"]);
 
+summaries = summarystats(chain)
+summaries2 = summarystats(chain2)
+mean(summarystats(chain)[:, :ess]) / length(θ)
+
+(length(θ) / (1+2*sum(autocor(β[:,1])))) / length(θ)
+plot(chain)
+plot(chain2)
+
+
+##
 p = 2
-plot(β[:, p])
-plot!(1:length(θ), cumsum(β[:,p])./(1:length(θ)))
+plot(β[:, 8])
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
-
 plot(θ)
 ## Estimate over multiple quantiles
 colnames = names(dat)

@@ -24,21 +24,27 @@ y = X * β .+ rand(Aepd(0., σ, θ, 0.5), n);
 
 @model apdreg(X, y; predictors=size(X,2)) = begin
     # priors
-    θ ~ Uniform(0.5,3)
+    θ =1.84#~ Uniform(0.2,3)
     σ ~ InverseGamma(1, 1)
     β ~ filldist(Normal(0., 100.), predictors)
     for i in 1:length(y)
         y[i] ~ Aepd(X[i,:] ⋅ β, σ, θ, 0.5)
+        # y[i] ~ Laplace(X[i,:] ⋅ β, σ)
     end
 end
 
-model = apdreg(X, y);
-chain = sample(model, NUTS(), 3000);
-# chain = sample(model, Gibbs(PG(100, :σ), HMC(.03, 10, :β)), 1000);
+model = apdreg(par.X, par.y);
+chain = sample(model, NUTS(), 7001);
 summaries = summarystats(chain)
-plot(chain[:"β[1]"])
-plot!(β[1:length(chain[:"β[1]"]),1])
+plot(chain[:"β[3]"])
+plot!(β[1:length(chain[:"β[5]"]),3])
 println(inits)
+
+reshape(chain[:"β[3]"].data, 7001)
+
+plot(1:7001, cumsum(reshape(chain[:"β[9]"].data, 7001))./(1:7001))
+plot!(1:7001, cumsum(β[:,9])./(1:7001))
+
 
 plot(chain[:"θ"])
 plot!(θ[1:length(chain[:"θ"])])

@@ -15,7 +15,7 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.5, 100000, 20, 20000);
+par = Sampler(y, X, 0.5, 150000, 20, 10000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
 β, θ, σ = mcmc(par, 100., 1., 1.7, βinit, 1.5, 1.1);
 inits = [median(β[:,i]) for i in 1:9]

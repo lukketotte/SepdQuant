@@ -46,20 +46,20 @@ mean(θ[:, ])
 [mean(βt[:,i]) for i in 1:9] |> println
 ## BAYESIAN APPROACH
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-M = 50
+M = 20
 p = 0.05
 feMCMC = FormatExpr("mcmc_{}.csv")
 α = range(0.1, 0.9, length = 9)
 
 for i in 1:length(α)
-    par = Sampler(y, X, α[i], 200000, 5, 100000);
+    par = Sampler(y, X, α[i], 110000, 10, 10000);
     N = Integer((par.nMCMC - par.burnIn)/par.thin) + 1
     β = SharedArray{Float64}((N, size(X)[2], M))
     σ = SharedArray{Float64}((N,M))
     θ = SharedArray{Float64}((N,M))
 
     @sync @distributed for i = 1:M
-        βt,θt,σt = mcmc(par, 100., .8, .25, βinit, 1., 1.)
+        βt,θt,σt = mcmc(par, 100., 1., ϵ[i], βinit, 1., 1.)
         β[:,:,i] = βt
         θ[:,i] = θt
         σ[:,i] = σt

@@ -5,8 +5,15 @@ using Turing, QuantileRegressions
 include("../../QuantileReg/QuantileReg.jl")
 include("../aepd.jl")
 using .QuantileReg, .AEPD
+using KernelDensity
 
+## Half cauchy check
+sims = abs.(rand(Cauchy(0,1), 100))
+k = kde(sims);
+x = range(minimum(sims), maximum(sims), length = 500);
+plot(x, pdf(k, x))
 
+##
 n = 200;
 β, α, σ = [2.1, 0.8], 0.5, 2.;
 θ =  1.

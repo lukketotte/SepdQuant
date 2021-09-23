@@ -15,18 +15,32 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.5, 150000, 20, 10000);
+# par = Sampler(y, X, 0.5, 150000, 20, 10000);
+
+# α = 0.1: thin = 10, ϵ = 0.5
+# α = 0.2: thin = 10, ϵ = 0.7
+# α = 0.3: thin = 10, ϵ = 0.9
+# α = 0.4: thin = 10, ϵ = 1.
+# α = 0.5: thin = 10, ϵ = 1.
+# α = 0.6: thin = 10, ϵ = 1.
+# α = 0.7: thin = 10, ϵ = 1.
+# α = 0.8: thin = 10, ϵ = 1.2
+# α = 0.9: thin = 10, ϵ = .5
+
+par = Sampler(y, X, 0.9, 50000, 20, 10000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 100., 1., 1.7, βinit, 1.5, 1.1);
+β, θ, σ = mcmc(par, 10000., 1., .7, βinit, 1.5, 1.1);
 inits = [median(β[:,i]) for i in 1:9]
+println(inits)
+
 ##
 using Turing, StatsPlots
 chain = Chains(β, ["intercept";names(dat[:, Not(["osvAll"])])]);
-chain2 = Chains([θ σ], ["θ", "σ"]);
-
 summaries = summarystats(chain)
-summaries2 = summarystats(chain2)
 mean(summarystats(chain)[:, :ess]) / length(θ)
+
+chain2 = Chains([θ σ], ["θ", "σ"]);
+summaries2 = summarystats(chain2)
 
 (length(θ) / (1+2*sum(autocor(β[:,1])))) / length(θ)
 plot(chain)
@@ -34,8 +48,8 @@ plot(chain2)
 
 
 ##
-p = 2
-plot(β[:, 8])
+p = 3
+plot(β[:, 1])
 1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
 plot(θ)
 ## Estimate over multiple quantiles

@@ -1,4 +1,4 @@
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Turing
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -17,35 +17,25 @@ X = hcat([1 for i in 1:length(y)], X);
 
 # par = Sampler(y, X, 0.5, 150000, 20, 10000);
 
-# α = 0.1: thin = 10, ϵ = 0.5
-# α = 0.2: thin = 10, ϵ = 0.7
-# α = 0.3: thin = 10, ϵ = 0.9
-# α = 0.4: thin = 10, ϵ = 1.
-# α = 0.5: thin = 10, ϵ = 1.
-# α = 0.6: thin = 10, ϵ = 1.
-# α = 0.7: thin = 10, ϵ = 1.
-# α = 0.8: thin = 10, ϵ = 1.2
-# α = 0.9: thin = 10, ϵ = .5
+# α = 0.1: thin = 30, ϵ = .9
+# α = 0.2: thin = 30, ϵ = 1.2
+# α = 0.3: thin = 30, ϵ = 1.3
+# α = 0.4: thin = 30, ϵ = 1.5
+# α = 0.5: thin = 30, ϵ = 1.5
+# α = 0.6: thin = 30, ϵ = 1.6
+# α = 0.7: thin = 30, ϵ = 1.6
+# α = 0.8: thin = 30, ϵ = 1.4
+# α = 0.9: thin = 10, ϵ = .6
 
-par = Sampler(y, X, 0.9, 50000, 20, 10000);
+par = Sampler(y, X, 0.5, 90000, 30, 10000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 10000., 1., .7, βinit, 1.5, 1.1);
+β, θ, σ = mcmc(par, 10000., 1., 1.5, βinit, 1.6, 1.1);
 inits = [median(β[:,i]) for i in 1:9]
 println(inits)
 
 ##
-using Turing, StatsPlots
 chain = Chains(β, ["intercept";names(dat[:, Not(["osvAll"])])]);
-summaries = summarystats(chain)
 mean(summarystats(chain)[:, :ess]) / length(θ)
-
-chain2 = Chains([θ σ], ["θ", "σ"]);
-summaries2 = summarystats(chain2)
-
-(length(θ) / (1+2*sum(autocor(β[:,1])))) / length(θ)
-plot(chain)
-plot(chain2)
-
 
 ##
 p = 3

@@ -40,9 +40,9 @@ pdf(d::Aepd, x::Real) = exp(logpdf(d, x))
 
 function rand(rng::AbstractRNG, d::Aepd)
     if rand(rng) < d.α
-        d.μ + d.σ^(1/d.p) * (-d.α * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
+        d.μ + d.σ * (-d.α * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
     else
-        d.μ + d.σ^(1/d.p) * ((1-d.α) * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
+        d.μ + d.σ * ((1-d.α) * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
     end
 end
 

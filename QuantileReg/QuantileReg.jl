@@ -1,8 +1,8 @@
 module QuantileReg
 
-export mcmc, Sampler, bootstrap
+export mcmc, Sampler
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff, QuantileRegressions, Optim, DataFrames
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff
 
 struct Sampler{T <: Real, M <: Real, Response <: AbstractVector, ModelMat <: AbstractMatrix}
     y::Response

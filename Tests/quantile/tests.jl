@@ -6,6 +6,18 @@ using .AEPD, .QuantileReg
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
+dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
+y = dat[:, :osvAll]
+X = dat[:, Not(["osvAll"])] |> Matrix
+X = X[y.>0,:];
+y = y[y.>0];
+X = hcat([1 for i in 1:length(y)], X);
+
+## Bootstrap
+
+
+
+## Simulation
 n = 500;
 β = [2.1, 0.8]
 X = [repeat([1], n) rand(Uniform(10, 20), n)]

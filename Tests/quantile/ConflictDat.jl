@@ -27,14 +27,15 @@ X = hcat([1 for i in 1:length(y)], X);
 # α = 0.8: thin = 30, ϵ = 1.4
 # α = 0.9: thin = 10, ϵ = .6
 
-par = Sampler(y, X, 0.5, 50000, 10, 10000);
+par = Sampler(y, X, 0.7, 200000, 5, 100000);
 βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 10000., .8, 0.6, βinit, 0.9, 1.1);
-inits = [median(β[:,i]) for i in 1:9]
-println(inits)
-
+β, θ, σ = mcmc(par, 10000., .8, 0.4, βinit, 0.9, 1.1);
+plot(β[:, 1])
+plot(θ)
 plot(cumsum(β[:,1])./(1:length(θ)))
 
+b = [mean(β[:,i]) for i in 1:9]
+println(b)
 ##
 chain = Chains(β, ["intercept";names(dat[:, Not(["osvAll"])])]);
 mean(summarystats(chain)[:, :ess]) / length(θ)

@@ -34,12 +34,14 @@ function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
     z  = s.y-s.X*β
     n = length(z)
     a = δ(s.α, θ)*(sum((.-z[z.<0]).^θ)/s.α^θ + sum(z[z.>=0].^θ)/(1-s.α)^θ)
-    return n/θ * log(δ(s.α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)
+    return n/θ * log(δ(s.α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ) + logpdf(Beta(2, 2), θ/2)
 end
 
 function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
-    prop = rand(Uniform(maximum([0., θ-ε]), minimum([3., θ + ε])), 1)[1]
-    return θcond(s, prop, β) - θcond(s, θ, β) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+    #prop = rand(Uniform(maximum([0., θ-ε]), minimum([2., θ + ε])), 1)[1]
+    prop = rand(Truncated(Normal(θ, ε^2), 0., 2.), 1)[1]
+    a = logpdf(Truncated(Normal(prop, ε^2), 0., 2.), θ) - logpdf(Truncated(Normal(θ, ε^2), 0., 2.), prop)
+    return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
 function sampleσ(s::Sampler, θ::Real, β::AbstractVector{<:Real})

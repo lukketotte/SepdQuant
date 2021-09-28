@@ -1,4 +1,4 @@
-using Distributions, QuantileRegressions
+using Distributions, QuantileRegressions, LinearAlgebra
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -13,9 +13,42 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-## Bootstrap
+## Simulation study
+μ₁, μ₂, μ₃ = [1., 0.], [4.,0.], [-2.,0.]
+Σ = [1 0.6 ; 0.6 1]
+η = (0.85, 0.0725, 0.0725)
 
+n = 100
+y = zeros(n, 2)
+for i ∈ 1:n
+    a = rand(Uniform(), 1)[1]
+    if a <= 0.85
+        y[i,:] = rand(MvNormal(μ₁, Σ), 1)
+    elseif a <= (0.85 + 0.0725)
+        y[i,:] = rand(MvNormal(μ₂, Σ), 1)
+    else
+        y[i,:] = rand(MvNormal(μ₃, Σ), 1)
+    end
+end
 
+scatter(y[:,2], y[:,1])
+
+X = hcat([1 for i in 1:n], y[:,2])
+y = y[:,1]
+
+par = Sampler(y, X, 0.5, 40000, 10, 10000);
+β, θ, σ = mcmc(par, 100000., 1., 0.01, [1., 0.8]);
+
+plot(β[:,2])
+[median(β[:,i]) for i in 1:2]
+plot(θ)
+plot(σ)
+
+√var(β[:,1])
+1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
+1-((θ[2:length(θ)] .=== θ[1:(length(θ) - 1)]) |> mean)
+
+logpdf(Beta(2, 2), 1/2)
 
 ## Simulation
 n = 500;

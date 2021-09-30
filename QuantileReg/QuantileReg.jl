@@ -81,8 +81,9 @@ function sampleβ(β::AbstractVector{<:Real}, ε::AbstractVector{<:Real},  s::Sa
     return logβCond(prop, X, y, α, θ, σ, τ, λ) - logβCond(β, X, y, α, θ, σ, τ, λ) > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
 
-function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}},
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1, θ₁::Real = 1; verbose = true)
+#AEPD
+function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real,
+    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || θ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
     β = zeros(s.nMCMC, p)
@@ -109,12 +110,47 @@ function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<
         nothing
 end
 
+# ALD
+function mcmc(s::Sampler, τ::Real, εᵦ::Union{Real, AbstractVector{<:Real}},
+    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1; verbose = true)
+    n, p = size(s.X)
+    σ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
+    β = zeros(s.nMCMC, p)
+    σ = zeros(s.nMCMC)
+    β[1,:] = typeof(β₁) <: Nothing ? inv(s.X'*s.X)*s.X'*s.y : β₁
+    σ[1] = σ₁
+
+    p = verbose && Progress(s.nMCMC-1, dt=0.5,
+        barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
+        barlen=50, color=:green)
+
+    for i ∈ 2:s.nMCMC
+        verbose && next!(p; showvalues=[(:iter,i) (:σ, round(σ[i-1], digits = 3))])
+        mcmcInner!(s, σ, β, i, εᵦ, τ)
+    end
+    return mcmcThin(σ, β, s)
+end
+
+function mcmcInner!(s::Sampler, σ::AbstractVector{<:Real},
+    β::AbstractMatrix{<:Real}, i::Int, εᵦ::Real, τ::Real)
+        σ[i] = sampleσ(s, 1, β[i-1,:])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, s, 1, σ[i], τ)
+        nothing
+end
+
 function mcmcThin(θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real}, β::Array{<:Real, 2}, s::Sampler)
     thin = ((s.burnIn:s.nMCMC) .% s.thin) .=== 0
     β = (β[s.burnIn:s.nMCMC,:])[thin,:]
     θ = (θ[s.burnIn:s.nMCMC])[thin]
     σ = (σ[s.burnIn:s.nMCMC])[thin]
     return β, θ, σ
+end
+
+function mcmcThin(σ::AbstractVector{<:Real}, β::Array{<:Real, 2}, s::Sampler)
+    thin = ((s.burnIn:s.nMCMC) .% s.thin) .=== 0
+    β = (β[s.burnIn:s.nMCMC,:])[thin,:]
+    σ = (σ[s.burnIn:s.nMCMC])[thin]
+    return β, σ
 end
 
 

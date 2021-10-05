@@ -1,4 +1,4 @@
-using Distributions, QuantileRegressions, LinearAlgebra
+using Distributions, QuantileRegressions, LinearAlgebra, Random
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -32,10 +32,6 @@ par = Sampler(y, X, 0.9, 20000, 5, 5000);
 
 plot(β[:,2])
 plot!(βa[:,2])
-
-[median(β[:,i]) for i in 1:2]
-plot(θ)
-plot(σ)
 
 √var(β[:,1])
 1-((β[2:size(β,1), 1] .=== β[1:(size(β,1) - 1), 1]) |> mean)
@@ -89,53 +85,102 @@ scatter!([1-0.05,2-0.05], [freq[1], freq[2]], label="ALD", yerror=errorsAld)
 histogram(rand(Pareto(.9, 100.), 1000))
 
 ## Generate data as in Johan and Randhal
-n = 100
-p = 0.8
-βtrue = (.5, 2.)
-x1 = rand(Uniform(0, 2), n)
-exp.(βtrue[1] .+ x1.*βtrue[2])
-sims = Poisson.(exp.(βtrue[1] .+ x1.*βtrue[2]))
-#sims = truncated.(sims, 1, Inf)
 
-y = [rand(sims[i], 1)[1] for i in 1:n]
-sum(y.>0)
-histogram(y)
+# Actual data
+dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
+yt = dat[:, :osvAll]
+yt = y[y.>0];
 
 
+Random.seed!(731)
+n = 500
+p = 0.72
+βtrue = (.5, 1.)
+x1 = rand(Uniform(0, 1), n)
+y = zeros(Int64, n)
+
+Random.seed!(735)
+Σ = [1. 0.4 0.3 ; 0.4 1.0 0.2 ; 0.3 0.2 1.]
+n = 1000
+X = hcat([1 for i in 1:n], rand(MvNormal([0, 0, 0], Σ), n)')# |> x -> reshape(x, n, 3)
+b = [3., 0.2, 0.2, 0.2]
+X * b
 y = zeros(Int64, n)
 for i ∈ 1:n
     if rand(Uniform(), 1)[1] < p
-        y[i] = rand(Poisson(exp(βtrue[1] + x1[i]*βtrue[2])), 1)[1]
+        #y[i] = rand(Poisson(exp(βtrue[1] + x1[i]*βtrue[2])), 1)[1]
+        y[i] = rand(Poisson(exp(X[i,:] ⋅ b)), 1)[1]
     else
-        y[i] = Integer(round(rand(Pareto(0.8, 500), 1)[1]))
+        # y[i] = Integer(round(rand(Pareto(0.5, 500), 1)[1]))
+        y[i] = Integer(round(rand(Pareto(X[i,:] ⋅ b, 150), 1)[1]))
     end
 end
-X = hcat(ones(sum(y.>0)), x1[y.>0])
-y = y[y.>0]
-histogram(y)
+
+# simulations more in line with Johans paper
+α = 0.5
+inits5 = qreg(@formula(x1 ~  x3 + x4 + x5), DataFrame(hcat(log.(y .- α), X), :auto), α) |> coef
+inits9 = qreg(@formula(x1 ~  x3 + x4 + x5), DataFrame(hcat(log.(y .- α), X), :auto), α) |> coef
+par = Sampler(y, X, α, 15000, 5, 5000);
+β, θ, σ = mcmc(par, 1000., 0.1, 0.1, 0.5, 0.5, inits5);
+β, θ, σ = mcmc(par, 1000., 0.4, 0.4, 0.5, 0.5, inits9);
+βa, σa = mcmc(par, 1000., 0.006, inits5, 1); # α = 0.5
+βa, σa = mcmc(par, 1000., 0.0025, inits9, 1);
+1-((β[2:size(β,1), 1] .=== β[1:(size(β,1) - 1), 1]) |> mean)
+1-((βa[2:size(βa,1), 1] .=== βa[1:(size(βa,1) - 1), 1]) |> mean)
+p = 2
+plot(β[:,1], label = "aepd")
+plot!(βa[:,p], label = "ald")
+plot(θ)
+
+
+mean(β[:,1])
+
+bayes = mean(β, dims = 1) |> x -> reshape(x, 4)
+ald = mean(βa, dims = 1) |> x -> reshape(x, 4)
+Q1, Q2 = zeros(length(y)), zeros(length(y))
+for i ∈ 1:length(y)
+    Q1[i] = y[i] <= ceil(exp(X[i,:] ⋅ bayes) + α - 1)
+    Q2[i] = y[i] <= ceil(exp(X[i,:] ⋅ ald) + α - 1)
+end
+mean(Q1)
+mean(Q2)
+
 # α = 0.5, ϵ = 0.02, ϵθ = 0.01
 # α = 0.9, ϵ = 0.0011, ϵθ = 0.5
 # α = 0.1, ϵ = 0.0011, ϵθ = 0.5
-par = Sampler(y, X, 0.5, 20000, 5, 5000);
-β, θ, σ = mcmc(par, 100000.,.5, 0.02, 0.5, 0.5, [1., 0.8]);
-βa, σa = mcmc(par, 100000., 0.01, [1., 0.8], 1);
+par = Sampler(y[y .> 0], X[y .> 0, :], 0.5, 20000, 5, 5000);
+inits1 = qreg(@formula(y ~ x), DataFrame(y = log.(y + rand(Uniform(), length(y))), x = x1), 0.1) |> coef
+inits5 = qreg(@formula(y ~ x), DataFrame(y = log.(y + rand(Uniform(), length(y))), x = x1), 0.5) |> coef
+inits9 = qreg(@formula(y ~ x), DataFrame(y = log.(y + rand(Uniform(), length(y))), x = x1), 0.9) |> coef
+β, θ, σ = mcmc(par, 100000.,.5, 0.01, 0.5, 0.5, inits1); # α = 0.1
+β, θ, σ = mcmc(par, 100000.,.5, 0.01, 0.5, 0.5, inits5); # α = 0.5
+β, θ, σ = mcmc(par, 100000.,1., 0.3, 0.5, 0.5, inits9); # α = 0.9
+βa, σa = mcmc(par, 100000., 0.03, inits1, 1); # α = 0.1
+βa, σa = mcmc(par, 100000., 0.03, inits5, 1); # α = 0.5
+βa, σa = mcmc(par, 100000., 0.01, inits9, 1); # α = 0.9
+1-((βa[2:size(βa,1), 1] .=== βa[1:(size(βa,1) - 1), 1]) |> mean)
 
+par = Sampler(y[y .> 0], X[y .> 0, :], 0.9, 20000, 5, 5000);
+β, θ, σ = mcmc(par, 100000.,10., .6, 1., 1., inits9);
 1-((θ[2:size(β,1)] .=== θ[1:(size(β,1) - 1)]) |> mean)
 1-((β[2:size(β,1), 1] .=== β[1:(size(β,1) - 1), 1]) |> mean)
+plot(β[:,1])
 plot(θ)
-plot(β[:,1])
 
+p = 2
+plot(βa[:,p], label = "ALD")
+plot!(β[:,p], label = "AEPD")
+qreg(@formula(y ~ x), DataFrame(y = log.(y + rand(Uniform(), length(y))), x = x1), 0.1) |> coef
+[mean(βa[:,i]) for i in 1:2]
 [mean(β[:,i]) for i in 1:2]
-
-plot(β[:,1])
-plot!(βa[:,1])
-
+plot(θ)
 # bootstrap
-N = 1500
+N = 2000
+α = 0.9
 βboot = zeros(N, 2)
 for i in 1:N
     ids = sample(1:length(y), length(y))
-    βboot[i,:] = qreg(@formula(y ~ x), DataFrame(y = log.(y[ids] + rand(Uniform(), length(y))), x = x1[ids]), 0.5) |> coef
+    βboot[i,:] = qreg(@formula(y ~ x), DataFrame(y = log.(y[ids] + rand(Uniform(), length(y))), x = x1[ids]), α) |> coef
 end
 
 freq = mean(βboot, dims = 1) |> x -> reshape(x, 2)
@@ -153,19 +198,17 @@ errorsBayes = collect(zip(abs.(b1 .- bayes[1]), abs.(b2 .- bayes[2])))
 errorsFreq = collect(zip(abs.(f1 .- freq[1]), abs.(f2 .- freq[2])))
 errorsAld= collect(zip(abs.(a1 .- ald[1]), abs.(a2 .- ald[2])))
 
-scatter([1,2], [bayes[1], bayes[2]], label="Bayesian", yerror=errorsBayes, legend=:bottomright)
+scatter([1,2], [bayes[1], bayes[2]], label="Bayesian", yerror=errorsBayes, legend=:bottomleft)
 scatter!([1+0.05,2+0.05], [freq[1], freq[2]], label="Frequentist", yerror=errorsFreq)
 scatter!([1-0.05,2-0.05], [ald[1], ald[2]], label="ALD", yerror=errorsAld)
 xlims!((0.8, 2.2))
 
 
-Q1 = zeros(length(y))
-Q2 = zeros(length(y))
-Q3 = zeros(length(y))
+Q1, Q2, Q3 = zeros(length(y)), zeros(length(y)), zeros(length(y))
 for i ∈ 1:length(y)
-    Q1[i] = log(y[i]) <= ceil(exp(X[i,:] ⋅ bayes) + 0.5 - 1)
-    Q2[i] = log(y[i]) <= ceil(exp(X[i,:] ⋅ freq) + 0.5 - 1)
-    Q3[i] = log(y[i]) <= ceil(exp(X[i,:] ⋅ ald) + 0.5 - 1)
+    Q1[i] = y[i] <= ceil(exp(X[i,:] ⋅ bayes) + α - 1)
+    Q2[i] = y[i] <= ceil(exp(X[i,:] ⋅ freq) + α - 1)
+    Q3[i] = y[i] <= ceil(exp(X[i,:] ⋅ ald) + α - 1)
 end
 mean(Q1)
 mean(Q2)

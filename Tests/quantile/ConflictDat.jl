@@ -1,4 +1,4 @@
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Turing
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Turing, QuantileRegressions
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -27,15 +27,33 @@ X = hcat([1 for i in 1:length(y)], X);
 # α = 0.8: thin = 30, ϵ = 1.4
 # α = 0.9: thin = 10, ϵ = .6
 
-par = Sampler(y, X, 0.7, 200000, 5, 100000);
-βinit = [-0.48, -0.14, -2.6, 3.7, 0., 0.1, 1.75, -0.05, 0.28]
-β, θ, σ = mcmc(par, 10000., .8, 0.4, βinit, 0.9, 1.1);
-plot(β[:, 1])
+α = 0.5
+par = Sampler(y, X, α, 5*15000, 5, 5000);
+
+βinit = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
+#par = Sampler(y, X, 0.7, 200000, 5, 100000);
+mcmc(par, 1000., 0.4, 0.4, 0.5, 0.5, inits9);
+β, θ, σ = mcmc(par, 1000., .8, 0.4, 0.9, 1.1, βinit);
+βa, σa = mcmc(par, 1000., 0.5, βinit, 1);
+
+1-((βa[2:size(βa, 1), 1] .=== βa[1:(size(βa, 1) - 1), 1]) |> mean)
+
+p = 2
+plot(β[:, p])
+plot(βa[:, 2])
 plot(θ)
 plot(cumsum(β[:,1])./(1:length(θ)))
 
 b = [mean(β[:,i]) for i in 1:9]
 println(b)
+
+Q = zeros(length(y))
+for i ∈ 1:length(y)
+    Q[i] = y[i] <= ceil(exp(X[i,:] ⋅ b) + 0.5)
+end
+mean(Q)
+mean(y <= ceil.(exp.(X * b) .+ 0.5))
 ##
 chain = Chains(β, ["intercept";names(dat[:, Not(["osvAll"])])]);
 mean(summarystats(chain)[:, :ess]) / length(θ)

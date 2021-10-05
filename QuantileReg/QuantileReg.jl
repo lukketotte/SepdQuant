@@ -34,14 +34,14 @@ function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
     z  = s.y-s.X*β
     n = length(z)
     a = δ(s.α, θ)*(sum((.-z[z.<0]).^θ)/s.α^θ + sum(z[z.>=0].^θ)/(1-s.α)^θ)
-    return n/θ * log(δ(s.α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ) + logpdf(Beta(2, 2), θ/2)
+    return n/θ * log(δ(s.α, θ))  - n*log(gamma(1+1/θ)) - n*log(a)/θ + loggamma(n/θ)# + logpdf(Beta(2, 2), θ/2)
 end
 
 function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
-    #prop = rand(Uniform(maximum([0., θ-ε]), minimum([2., θ + ε])), 1)[1]
-    prop = rand(Truncated(Normal(θ, ε^2), 0., 2.), 1)[1]
-    a = logpdf(Truncated(Normal(prop, ε^2), 0., 2.), θ) - logpdf(Truncated(Normal(θ, ε^2), 0., 2.), prop)
-    return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
+    prop = rand(Uniform(maximum([0., θ-ε]), minimum([30., θ + ε])), 1)[1]
+    #prop = rand(Truncated(Normal(θ, ε^2), 0., 2.), 1)[1]
+    # logpdf(Truncated(Normal(prop, ε^2), 0., 2.), θ) - logpdf(Truncated(Normal(θ, ε^2), 0., 2.), prop)
+    return θcond(s, prop, β) - θcond(s, θ, β) >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
 function sampleσ(s::Sampler, θ::Real, β::AbstractVector{<:Real})
@@ -63,7 +63,7 @@ end
 # -Hessian
 ∂β2(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real}) = ForwardDiff.jacobian(β -> -∂β(β, s, θ, σ, τ, λ), β)
 
-function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real, τ::Real) where {T <: Real}
+function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real, τ::Real)
     λ = abs.(rand(Cauchy(0,1), length(β)))
     ∇ = ∂β(β, s, θ, σ, τ, λ)
     H = (∂β2(β, s, maximum([θ, 1.0001]), σ, τ, λ))^(-1) |> Symmetric
@@ -126,7 +126,7 @@ function mcmc(s::Sampler, τ::Real, εᵦ::Union{Real, AbstractVector{<:Real}},
 
     for i ∈ 2:s.nMCMC
         verbose && next!(p; showvalues=[(:iter,i) (:σ, round(σ[i-1], digits = 3))])
-        mcmcInner!(s, σ, β, i, εᵦ, τ)
+        mcmcInner!(s, 1, σ, β, i, εᵦ, τ)
     end
     return mcmcThin(σ, β, s)
 end

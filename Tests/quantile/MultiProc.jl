@@ -1,10 +1,10 @@
 using Distributed, SharedArrays
-@everywhere using Distributions, LinearAlgebra, StatsBase, SpecialFunctions
+@everywhere using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, QuantileRegressions, DataFrames
 @everywhere include(joinpath(@__DIR__, "../aepd.jl"))
 @everywhere include(joinpath(@__DIR__, "../../QuantileReg/QuantileReg.jl"))
 @everywhere using .AEPD, .QuantileReg
 
-using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
+using Plots, PlotThemes, CSV, StatFiles, CSVFiles
 theme(:juno)
 using Formatting
 
@@ -81,3 +81,38 @@ mean(σ)
 
 print(a)
 print(b)
+
+
+## Prediction
+α = 0.9
+reps = 100
+aepd = SharedVector{Float64}(reps)
+freq = SharedVector{Float64}(reps)
+
+@sync @distributed for j ∈ 1:reps
+    ids = sample(1:length(y), length(y)-100; replace = false)
+    trainX, trainy = X[ids,:], y[ids]
+    testX, testy = X[Not(ids),:], y[Not(ids)]
+    par = Sampler(trainy, trainX, α, 21000, 5, 1000)
+
+    βinit = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, par.α) |> coef
+    β, θ, σ = mcmc(par, 0.4, 0.1, 1., 1., βinit);
+    βest = [mean(β[:,i]) for i in 1:9]
+
+    Q = zeros(100)
+    Q2 = zeros(100)
+    for i in 1:100
+        Q[i] = testy[i] <= ceil(exp(testX[i,:] ⋅ βest) + par.α - 1)
+        Q2[i] = testy[i] <= ceil(exp(testX[i,:] ⋅ βinit) + par.α - 1)
+    end
+    aepd[j] = mean(Q)
+    freq[j] = mean(Q2)
+end
+
+mean(aepd)
+mean(freq)
+
+√var(aepd)
+√var(freq)
+print(freq)

@@ -84,7 +84,7 @@ print(b)
 
 
 ## Prediction
-α = 0.9
+α = 0.8
 reps = 100
 aepd = SharedVector{Float64}(reps)
 freq = SharedVector{Float64}(reps)
@@ -97,7 +97,7 @@ freq = SharedVector{Float64}(reps)
 
     βinit = DataFrame(hcat(par.y, par.X), :auto) |> x ->
         qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, par.α) |> coef
-    β, θ, σ = mcmc(par, 0.4, 0.1, 1., 1., βinit);
+    β, θ, σ = mcmc(par, 0.4, 0.4, 4., 1.4, βinit);
     βest = [mean(β[:,i]) for i in 1:9]
 
     Q = zeros(100)
@@ -110,9 +110,11 @@ freq = SharedVector{Float64}(reps)
     freq[j] = mean(Q2)
 end
 
-mean(aepd)
-mean(freq)
+mean(aepd[aepd.>0])
+mean(freq[aepd.>0])
 
-√var(aepd)
-√var(freq)
+print(aepd)
+
+√var(aepd[aepd.>0])
+√var(freq[aepd.>0])
 print(freq)

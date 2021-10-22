@@ -67,10 +67,10 @@ end
 
 function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
     ∇ = ∂β(β, s, θ, σ)
-    H = (∂β2(β, s, maximum([θ, 1.0001]), σ))^(-1) |> Symmetric
+    H = (∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
     prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
     ∇ₚ = ∂β(prop, s, θ, σ)
-    Hₚ = (∂β2(prop, s, maximum([θ, 1.0001]), σ))^(-1) |> Symmetric
+    Hₚ = (∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
     αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
     αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * ∇ₚ, ε^2 * Hₚ), β)
     return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
@@ -111,7 +111,7 @@ end
 function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real},
     β::AbstractMatrix{<:Real}, i::Int, ε::Real, εᵦ::Real)
         θ[i] = sampleθ(s, θ[i-1], β[i-1,:], ε)
-        σ[i] = sampleσ(s, θ[i-1], β[i-1,:])
+        σ[i] = sampleσ(s, θ[i], β[i-1,:])
         β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ[i], σ[i])
         nothing
 end

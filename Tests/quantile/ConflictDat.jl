@@ -27,8 +27,8 @@ X = hcat([1 for i in 1:length(y)], X);
 # α = 0.8: thin = 30, ϵ = 1.4
 # α = 0.9: thin = 10, ϵ = .6
 
-α = 0.5
-par = Sampler(y, X, α, 15000, 5, 5000);
+α = 0.9
+par = Sampler(y, X, α, 1000, 5, 1);
 
 βinit = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef

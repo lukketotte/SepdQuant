@@ -26,13 +26,15 @@ for i ∈ 1:n
         y[i] = 1.2 - 0.2 * x[i] + 5*raepd(1, 1, 1, 0.25)[1]
     end
 end
+DataFrame(hcat(y, x), :auto) |> x -> qreg(@formula(x1 ~  x2), x, α) |> coef |> println
+
 scatter(x, y)
 
 
 β1 = DataFrame(hcat(y, x), :auto) |> x -> qreg(@formula(x1 ~  x2), x, α) |> coef
 X =  hcat(ones(n), x)
 par = Sampler(y, X, α, 30000, 5, 10000);
-β, θ, _ = mcmc(par, 1000, 0.6, 0.05, 1., 1., β1);
+β, θ, _ = mcmc(par, 1000, 0.6, 0.01, 1., 1., β1);
 1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
 plot(β[:,2])
 plot(θ)

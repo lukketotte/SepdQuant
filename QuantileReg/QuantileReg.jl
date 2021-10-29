@@ -38,9 +38,9 @@ function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
     return -log(θ) + loggamma(n/θ) - (n/θ) * log(a) + log(πθ(θ))
 end
 
-function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
-    prop = rand(Truncated(Normal(θ, ε^2), 0.5, Inf), 1)[1]
-    a = logpdf(Truncated(Normal(prop, ε^2), 0.5, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), 0.5, Inf), prop)
+function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real; trunc = 0.5)
+    prop = rand(Truncated(Normal(θ, ε^2), trunc, Inf), 1)[1]
+    a = logpdf(Truncated(Normal(prop, ε^2), trunc, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), trunc, Inf), prop)
     return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
@@ -54,9 +54,7 @@ function logβCond(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real)
 end
 
 function logβCond(β::AbstractVector{<:Real},s::Sampler, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real})
-    z = s.y - s.X*β
-    b = δ(s.α, θ)/σ * (sum((.-z[z.< 0]).^θ) / s.α^θ + sum(z[z.>=0].^θ) / (1-s.α)^θ)
-    return -b -1/(2*τ) * β'*diagm(λ.^(-2))*β
+    return - gamma(1+1/θ)^θ/σ * kernel(s, β, θ) -1/(2*τ) * β'*diagm(λ.^(-2))*β
 end
 
 
@@ -137,12 +135,14 @@ function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{
     return mcmcThin(θ, σ, β, s)
 end
 
-function mcmcInner!(s::Sampler, σ::AbstractVector{<:Real},
-    β::AbstractMatrix{<:Real}, i::Int, εᵦ::Real, τ::Real)
-        σ[i] = sampleσ(s, 1, β[i-1,:])
-        β[i,:] = sampleβ(β[i-1,:], εᵦ, s, 1, σ[i], τ)
+function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real},
+    β::AbstractMatrix{<:Real}, i::Int, ε::Real, εᵦ::Real, τ::Real)
+        θ[i] = sampleθ(s, θ[i-1], β[i-1,:], ε, trunc = 0.01)
+        σ[i] = sampleσ(s, θ[i-1], β[i-1,:])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ[i], σ[i], τ)
         nothing
 end
+
 
 # ALD
 function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}},

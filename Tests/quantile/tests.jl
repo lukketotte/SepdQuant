@@ -1,4 +1,4 @@
-using Distributions, QuantileRegressions, LinearAlgebra, Random
+using Distributions, QuantileRegressions, LinearAlgebra, Random, SpecialFunctions
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -6,6 +6,50 @@ using .AEPD, .QuantileReg
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
+##
+function raepd(n::Int, p1::Real, p2::Real, α::Real)
+    u = rand(Uniform(), n)
+    y1 = α .* rand(Gamma(1/p1, 1), n).^(1/p1) .* (sign.(u .- α) .- 1) ./ (2*gamma(1+1/p1))
+    y2 = (1-α) .* rand(Gamma(1/p2, 1), n).^(1/p2) .* (sign.(u .- α) .+ 1) ./ (2*gamma(1+1/p2))
+    y1 + y2
+end
+
+α = 0.25
+n = 500;
+x = rand(Normal(0, 1), n);
+y = zeros(n)
+for i ∈ 1:n
+    u = rand(Uniform(), 1)[1]
+    if u <= 0.8
+        y[i] = 1.2 - 0.2 * x[i] + raepd(1, 1, 1, 0.25)[1]
+    else
+        y[i] = 1.2 - 0.2 * x[i] + 5*raepd(1, 1, 1, 0.25)[1]
+    end
+end
+scatter(x, y)
+
+
+β1 = DataFrame(hcat(y, x), :auto) |> x -> qreg(@formula(x1 ~  x2), x, α) |> coef
+X =  hcat(ones(n), x)
+par = Sampler(y, X, α, 30000, 5, 10000);
+β, θ, _ = mcmc(par, 1000, 0.6, 0.05, 1., 1., β1);
+1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
+plot(β[:,2])
+plot(θ)
+
+β2 = median.([β[:,i] for i ∈ 1:2])# |> x -> reshape(x, 2)
+
+sum((β1 - [1.2, -0.2]).^2)
+sum((β2 - [1.2, -0.2]).^2)
+
+Xt = hcat(ones(100), testX)
+[testy[i] <= Xt[i,:] ⋅ β2 for i in 1:100] |> mean
+[testy[i] <= Xt[i,:] ⋅ β1 for i in 1:100] |> mean
+
+scatter(testX, testy, label = "")
+plot!(testX, β1[1] .+ testX.*β1[2], label = "freq")
+plot!(testX, β2[1] .+ testX.*β2[2], label = "aepd")
+##
 μ₁, μ₂, μ₃ = [1., 0.], [4.,0.], [-2.,0.]
 Σ = [1 0.6 ; 0.6 1]
 η = (0.85, 0.075, 0.075)

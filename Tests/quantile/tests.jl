@@ -14,35 +14,81 @@ function raepd(n::Int, p1::Real, p2::Real, α::Real)
     y1 + y2
 end
 
-α = 0.25
+function simdata(x::AbstractVector{<:Real}, α::Real, f::Real, prop::Real)
+    n = size(x, 1)
+    y = zeros(n)
+    for i ∈ 1:n
+        u = rand(Uniform(), 1)[1]
+        if u <= prop
+            y[i] = 1.2 - 0.2 * x[i] + raepd(1, 1, 1, α)[1]
+        else
+            y[i] = 1.2 - 0.2 * x[i] + 10*raepd(1, 1, 1, α)[1]
+        end
+    end
+    y
+end
+
+N = 5
+MSEald = zeros(N)
+MSEaepd = zeros(N)
+α = 0.9
+n = 500
+x = rand(Normal(0, 1), n);
+
+for i ∈ 1:N
+    i % 10 == 0 && println(i)
+    y = simdata(x, α, 10, 0.8)
+    β1 = DataFrame(hcat(y, x), :auto) |> x -> qreg(@formula(x1 ~  x2), x, α) |> coef
+    par = Sampler(y, hcat(ones(n), x), α, 30000, 5, 10000);
+    β, θ, _ = mcmc(par, 1000, 0.6, 0.02, 1., 1., β1, verbose = false);
+    β2 = median.([β[:,i] for i ∈ 1:2])
+
+    MSEald[i] = sum((β1 - [1.2, -0.2]).^2)
+    MSEaepd[i] = sum((β2 - [1.2, -0.2]).^2)
+end
+
+mean(MSEald)
+mean(MSEaepd)
+√var(MSEaepd)
+√var(MSEald)
+
+α = 0.1
 n = 500;
 x = rand(Normal(0, 1), n);
 y = zeros(n)
 for i ∈ 1:n
     u = rand(Uniform(), 1)[1]
-    if u <= 0.8
-        y[i] = 1.2 - 0.2 * x[i] + raepd(1, 1, 1, 0.25)[1]
+    if u <= 1
+        y[i] = 1.2 - 0.2 * x[i] + raepd(1, 2, 2, α)[1]
     else
-        y[i] = 1.2 - 0.2 * x[i] + 5*raepd(1, 1, 1, 0.25)[1]
+        y[i] = 1.2 - 0.2 * x[i] + 5*raepd(1, 2, 2, α)[1]
     end
 end
-DataFrame(hcat(y, x), :auto) |> x -> qreg(@formula(x1 ~  x2), x, α) |> coef |> println
 
 scatter(x, y)
 
-
 β1 = DataFrame(hcat(y, x), :auto) |> x -> qreg(@formula(x1 ~  x2), x, α) |> coef
 X =  hcat(ones(n), x)
-par = Sampler(y, X, α, 30000, 5, 10000);
-β, θ, _ = mcmc(par, 1000, 0.6, 0.01, 1., 1., β1);
+par = Sampler(y, X, α, 40000, 5, 10000);
+β, θ, _ = mcmc(par, 1000, 0.6, 0.01, 1., 2., β1);
 1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
-plot(β[:,2])
+plot(β[:,1])
 plot(θ)
 
-β2 = median.([β[:,i] for i ∈ 1:2])# |> x -> reshape(x, 2)
+β2 = mean.([β[:,i] for i ∈ 1:2])# |> x -> reshape(x, 2)
 
 sum((β1 - [1.2, -0.2]).^2)
 sum((β2 - [1.2, -0.2]).^2)
+
+Q1 = zeros(length(y))
+Q2 = zeros(length(y))
+for i ∈ 1:length(y)
+    Q2[i] = y[i] <= X[i,:] ⋅ β2
+    Q1[i] = y[i] <= X[i,:] ⋅ β1
+end
+mean(Q1)
+mean(Q2)
+
 
 Xt = hcat(ones(100), testX)
 [testy[i] <= Xt[i,:] ⋅ β2 for i in 1:100] |> mean

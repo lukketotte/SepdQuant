@@ -7,6 +7,32 @@ using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
 ##
+α = 0.25
+n = 2000
+y = 0.5 .+ rand(Normal(), n)
+β1 = DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, α) |> coef
+par = Sampler(y, hcat(ones(n)), 0.3036725, 11000, 5, 1000);
+β, θ, σ = mcmc(par, 1000, 0.6, 0.2, 1., 1., β1);
+1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
+plot(β[:,1])
+
+mean(β[:,1])
+mean(σ)
+mean(θ)
+
+mean(y .< β1)
+mean(y .< mean(β[:,1]))
+
+Q1 = zeros(length(y))
+Q2 = zeros(length(y))
+for i ∈ 1:length(y)
+    Q2[i] = y[i] <= X[i,:] ⋅ β2
+    Q1[i] = y[i] <= X[i,:] ⋅ β1
+end
+mean(Q1)
+mean(Q2)
+
+##
 function raepd(n::Int, p1::Real, p2::Real, α::Real)
     u = rand(Uniform(), n)
     y1 = α .* rand(Gamma(1/p1, 1), n).^(1/p1) .* (sign.(u .- α) .- 1) ./ (2*gamma(1+1/p1))

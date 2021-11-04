@@ -31,18 +31,17 @@ end
 
 function logpdf(d::Aepd, x::Real)
     μ, σ, p, α = params(d)
-    del = δ(p, α)
-    C = del^(1/p) / (gamma(1+1/p) * σ^(1/p))
-    x < μ ? log(C) - del/(σ*α^p) * (μ-x)^p : log(C) - del/(σ*(1-α)^p) * (x-μ)^p
+    -log(σ) - (gamma(1+1/p)/σ)^p * (x < μ ? ((μ-x)/α)^p : ((x-μ)/(1-α))^p)
 end
 
 pdf(d::Aepd, x::Real) = exp(logpdf(d, x))
 
 function rand(rng::AbstractRNG, d::Aepd)
+    μ, σ, p, α = params(d)
     if rand(rng) < d.α
-        d.μ + d.σ * (-d.α * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
+        μ + σ * α * rand(Gamma(1/p, 1))^(1/p) / (2*gamma(1+1/p))
     else
-        d.μ + d.σ * ((1-d.α) * (rand(Gamma(1/d.p, 1))/δ(d.p, d.α))^(1/d.p))
+        μ + σ * (1-α) * rand(Gamma(1/p, 1))^(1/p) / (2*gamma(1+1/p))
     end
 end
 

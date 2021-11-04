@@ -145,7 +145,7 @@ end
 
 
 # ALD
-function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}},
+function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real,
     β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1; verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
@@ -160,15 +160,15 @@ function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}},
 
     for i ∈ 2:s.nMCMC
         verbose && next!(p; showvalues=[(:iter,i) (:σ, round(σ[i-1], digits = 3))])
-        mcmcInner!(s, 1, σ, β, i, εᵦ)
+        mcmcInner!(s, σ, θ, β, i, εᵦ)
     end
     return mcmcThin(σ, β, s)
 end
 
-function mcmcInner!(s::Sampler, σ::AbstractVector{<:Real},
+function mcmcInner!(s::Sampler, σ::AbstractVector{<:Real}, θ::Real,
     β::AbstractMatrix{<:Real}, i::Int, εᵦ::Real)
-        σ[i] = sampleσ(s, 1, β[i-1,:])
-        β[i,:] = sampleβ(β[i-1,:], εᵦ, s, 1, σ[i])
+        σ[i] = sampleσ(s, θ, β[i-1,:])
+        β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ, σ[i])
         nothing
 end
 

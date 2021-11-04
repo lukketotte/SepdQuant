@@ -1,4 +1,4 @@
-using Distributions, QuantileRegressions, LinearAlgebra, Random, SpecialFunctions
+using Distributions, QuantileRegressions, LinearAlgebra, Random, SpecialFunctions, QuadGK
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -7,18 +7,87 @@ using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
 ##
-α = 0.25
-n = 2000
+f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
+
+function quantconvert(q, p, α, μ, σ)
+    a₁ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, Inf)[1]
+    a₂ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, q)[1]
+    1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
+end
+
+α = range(0.01, 0.99, length = 101);
+# normal
+p = [0.75, 1.5, 2, 3];
+ε = [0.05, 0.2, 0.1, 0.05];
+
+# Laplace
+p = [0.75, 1.25, 1.5];
+ε = [0.025, 0.1, 0.1];
+n = 1000;
+y = 0.5 .+ rand(Laplace(), n);
+
+par = Sampler(y, hcat(ones(n)), 0.5, 21000, 5, 6000);
+
+βs = zeros(length(p));
+σs = zeros(length(p));
+for j in 1:length(p)
+    β, σ = mcmc(par, ε[j], p[j], DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.5) |> coef, 1.)
+    βs[j] = median(β[:,1])
+    σs[j] = median(σ)
+end
+
+β, σ = mcmc(par, 0.1, 1.5, DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.5) |> coef, 1.);
+1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
+plot(β[:,1])
+
+βs
+#βs = zeros(length(p))
+βs[6] = median(β[:,1])
+
+τl = zeros(length(α), length(p))
+for i ∈ 1:length(α)
+    for j ∈ 1:length(p)
+        β1 = (DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, α[i]) |> coef)[1]
+        τl[i, j] = quantconvert(β1, p[j], 0.5, βs[j], σs[j])
+    end
+end
+
+τ
+
+DataFrame(tau = reshape(τ, (404,)),
+    p = repeat(p, inner = 101),
+    a = repeat(α, outer = 4)) |> x -> save("res.csv", x)
+
+α[51]
+τ[51,:] |> println
+
+
+
+plot(α, α)
+plot!(α, τl[:,3])
+
+τ[100,:]
+
+
+for j ∈ 2:length(p)
+    plot!(α, τ[:, 2])
+end
+
+α = 0.9
+n = 1000
 y = 0.5 .+ rand(Normal(), n)
+#y = 0.5 .+ raepd(n, 2, 2, 0.1)
 β1 = DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, α) |> coef
-par = Sampler(y, hcat(ones(n)), 0.3036725, 11000, 5, 1000);
-β, θ, σ = mcmc(par, 1000, 0.6, 0.2, 1., 1., β1);
+par = Sampler(y, hcat(ones(n)), 0.8360853, 11000, 5, 1000);
+β, θ, σ = mcmc(par, 1000, 0.6, 0.1, 1., 1., β1);
+β, σ = mcmc(par, 0.1, 2, β1, 1.);
 1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
 plot(β[:,1])
 
 mean(β[:,1])
 mean(σ)
 mean(θ)
+β1[1]
 
 mean(y .< β1)
 mean(y .< mean(β[:,1]))

@@ -1,5 +1,5 @@
 using Distributed, SharedArrays
-@everywhere using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, QuantileRegressions, DataFrames
+@everywhere using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, QuantileRegressions, DataFrames, QuadGK
 @everywhere include(joinpath(@__DIR__, "../aepd.jl"))
 @everywhere include(joinpath(@__DIR__, "../../QuantileReg/QuantileReg.jl"))
 @everywhere using .AEPD, .QuantileReg
@@ -8,6 +8,49 @@ using Plots, PlotThemes, CSV, StatFiles, CSVFiles
 theme(:juno)
 using Formatting
 
+## α to τ
+@everywhere f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
+
+@everywhere function quantconvert(q, p, α, μ, σ)
+    a₁ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, Inf)[1]
+    a₂ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, q)[1]
+    1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
+end
+
+α = range(0.01, 0.99, length = 101);
+p = [0.75, 1.5, 2, 3];
+ε = [0.05, 0.2, 0.1, 0.05];
+N = 20
+n = 2000
+τ = SharedArray{Float64}(length(α), length(p), N)
+
+@sync @distributed for j ∈ 1:length(p)
+    for iter ∈ 1:N
+        y = 0.5 .+ rand(Normal(), n);
+        inits = DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.5) |> coef
+        par = Sampler(y, hcat(ones(n)), 0.5, 16000, 5, 6000);
+        β, σ = mcmc(par, ε[j], p[j], inits, 1., verbose = false)
+        β = median(β[:,1])
+        σ = median(σ)
+
+        for i ∈ 1:length(α)
+            q = (DataFrame(hcat(y, ones(n)), :auto) |> x -> qreg(@formula(x1 ~  1), x, α[i]) |> coef)[1]
+            τ[i, j, iter] = quantconvert(q, p[j], 0.5, β, σ)
+        end
+    end
+end
+
+
+tau = mean(τ, dims = 3)[:,:,1]
+
+plot(α, α)
+plot!(α, tau[:,4])
+
+DataFrame(tau = reshape(tau, (404,)),
+    p = repeat(p, inner = 101),
+    a = repeat(α, outer = 4)) |> x -> save("res.csv", x)
+
+##
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
 y = dat[:, :osvAll]
 X = dat[:, Not(["osvAll"])] |> Matrix

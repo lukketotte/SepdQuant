@@ -161,7 +161,7 @@ function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<
 end
 
 # AEPD horse-shoe prior
-function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real,
+"""function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real,
     β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || θ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
@@ -187,7 +187,7 @@ function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<
         σ[i] = sampleσ(s, θ[i-1], β[i-1,:])
         β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ[i], σ[i], τ)
         nothing
-end
+end"""
 
 
 # ALD

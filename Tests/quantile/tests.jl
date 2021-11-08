@@ -15,6 +15,7 @@ function quantconvert(q, p, α, μ, σ)
     1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
 end
 
+
 α = range(0.01, 0.99, length = 101);
 # normal
 p = [0.75, 1.5, 2, 3];
@@ -24,9 +25,16 @@ p = [0.75, 1.5, 2, 3];
 p = [0.75, 1.25, 1.5];
 ε = [0.025, 0.1, 0.1];
 n = 1000;
-y = 0.5 .+ rand(Laplace(), n);
+y = 0.5 .+ rand(Normal(), n);
 
 par = Sampler(y, hcat(ones(n)), 0.5, 21000, 5, 6000);
+β, θ, σ, α = mcmc(par, 0.4, 0.25, 0.2, 1, 2, 0.5)
+1-((α[2:length(α)] .=== α[1:(length(α) - 1)]) |> mean)
+
+plot(α)
+plot(θ)
+plot(σ)
+plot(β[:,1])
 
 βs = zeros(length(p));
 σs = zeros(length(p));

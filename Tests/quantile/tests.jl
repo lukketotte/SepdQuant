@@ -6,6 +6,41 @@ using .AEPD, .QuantileReg
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
+## Estimate all parameters on casualty data
+dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
+y = dat[:, :osvAll]
+X = dat[:, Not(["osvAll"])] |> Matrix
+X = X[y.>0,:];
+y = y[y.>0];
+X = hcat([1 for i in 1:length(y)], X);
+
+par = Sampler(y, X, 0.5, 100000, 5, 10000);
+β, θ, σ, α = mcmc(par, 0.4, 0.3, 0.5, 1, 2, 0.5)
+a, p, s = mean(α), mean(θ), mean(σ)
+acceptance(β)
+acceptance(α)
+
+plot(θ)
+plot(β[:,3])
+
+α = range(0.01, 0.99, length = 101);
+τ = zeros(length(α))
+μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1))
+
+for i ∈ 1:length(α)
+    b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α[i]) |> coef
+    q = X * b
+    temp = 0
+    for j ∈ 1:length(par.y)
+        temp += quantconvert(q[j], p, a, μ[j], s) / length(par.y)
+    end
+    τ[i] = temp
+end
+
+plot(α, τ)
+plot!(α, α)
+
 ##
 f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
 

@@ -3,37 +3,37 @@ using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ForwardDiff
 include("../../QuantileReg/QuantileReg.jl")
 using.QuantileReg
 
-using Traceur
-
-n = 200;
-β, α, σ = [2.1, 0.8], 0.5, 2.;
-θ =  1.
-X = [repeat([1], n) rand(Uniform(10, 20), n)]
-y = X * β .+ rand(Normal(0., 1.), n);
-s = Sampler(y, X, 0.5, 1000)
-
-function πθ(θ::Real)
-    θ^(-3/2) * √((1+1/θ) * trigamma(1+1/θ))
-end
-
-function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
-    n = length(z)
-    a = gamma(1+1/θ)^θ * kernel(s, β, θ)
-    return -log(θ) + loggamma(n/θ) - (n/θ) * log(a) + log(πθ(θ))
-end
-
-function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
-    prop = rand(Truncated(Normal(θ, ε^2), 0.5, Inf), 1)[1]
-    a = logpdf(Truncated(Normal(prop, ε^2), 0.5, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), 0.5, Inf), prop)
-    return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
-end
-
 kernel(s::Sampler, β::AbstractVector{<:Real}, θ::Real) = s.y-s.X*β |> z -> (sum((.-z[z.<0]).^θ)/s.α^θ + sum(z[z.>0].^θ)/(1-s.α)^θ)
 
+function logβCond(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real)
+    return - gamma(1+1/θ)^θ/σ^θ * kernel(s, β, θ)
+end
 
+∂β(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real) = ForwardDiff.gradient(β -> logβCond(β, s, θ, σ), β)
+∂β2(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real) = ForwardDiff.jacobian(β -> -∂β(β, s, θ, σ), β)
 
-@trace πθ(2.)
-@trace θcond(s, 2., β)
+function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
+    ∇ = ∂β(β, s, θ, σ)
+    H = (∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
+    prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
+    ∇ₚ = ∂β(prop, s, θ, σ)
+    Hₚ = (∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
+    αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
+    αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * ∇ₚ, ε^2 * Hₚ), β)
+    return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
+end
 
+N = 10000
+betas = zeros(N, size(X, 2))
+betas[1,:] = b
+for i in 2:N
+    betas[i,:] = sampleβ(betas[i-1,:], 0.1, par, 3., 4.8)
+end
 
-@trace kernel(s, β, 2)
+plot(betas[:,1])
+acceptance(betas)
+
+plot(cumsum(betas[:,7]) ./ (1:N))
+
+mean(betas, dims = 1) |> println
+println(b)

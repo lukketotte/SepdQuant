@@ -6,7 +6,14 @@ using .AEPD, .QuantileReg
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
 theme(:juno)
 
-## Estimate all parameters on casualty data
+f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
+
+function quantconvert(q, p, α, μ, σ)
+    a₁ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, Inf)[1]
+    a₂ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, q)[1]
+    1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
+end
+
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
 y = dat[:, :osvAll]
 X = dat[:, Not(["osvAll"])] |> Matrix
@@ -14,15 +21,40 @@ X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.5, 100000, 5, 10000);
-β, θ, σ, α = mcmc(par, 0.4, 0.3, 0.5, 1, 2, 0.5)
-a, p, s = mean(α), mean(θ), mean(σ)
+##
+α = 0.1
+par = Sampler(y, X, α, 50000, 5, 10000);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
+β, θ, σ = mcmc(par, .4, 0.15, 1, 1, b)
 acceptance(β)
-acceptance(α)
-
+plot(β[:,2])
 plot(θ)
-plot(β[:,3])
 
+mean(θ)
+mean(σ)
+
+q = X * b
+μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1))
+τ = [quantconvert(q[j], mean(θ), α, μ[j], mean(σ)) for j in 1:length(par.y)] |> mean
+
+par = Sampler(y, X, 0.137, 11000, 5, 1000);
+β, σ = mcmc(par, .1, 2.93, 4, b)
+plot(β[:,1])
+acceptance(β)
+
+mean(β, dims = 1) |> println
+b |> println
+N = 500
+bs = zeros(N)
+B = zeros(N, length(b))
+for i ∈ 1:N
+    ids = sample(1:length(par.y), length(par.y))
+    B[i,:] =  DataFrame(hcat(par.y[ids], par.X[ids,:]), :auto) |> x ->
+        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
+end
+
+##
 α = range(0.01, 0.99, length = 101);
 τ = zeros(length(α))
 μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1))
@@ -42,13 +74,7 @@ plot(α, τ)
 plot!(α, α)
 
 ##
-f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
 
-function quantconvert(q, p, α, μ, σ)
-    a₁ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, Inf)[1]
-    a₂ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, q)[1]
-    1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
-end
 
 
 α = range(0.01, 0.99, length = 101);

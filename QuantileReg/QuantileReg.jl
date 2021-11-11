@@ -65,11 +65,11 @@ function sampleσ(s::Sampler, θ::Real, β::AbstractVector{<:Real})
 end
 
 function logβCond(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real)
-    return - gamma(1+1/θ)^θ/σ * kernel(s, β, θ)
+    return - gamma(1+1/θ)^θ/σ^θ * kernel(s, β, θ)
 end
 
 function logβCond(β::AbstractVector{<:Real},s::Sampler, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real})
-    return - gamma(1+1/θ)^θ/σ * kernel(s, β, θ) -1/(2*τ) * β'*diagm(λ.^(-2))*β
+    return - gamma(1+1/θ)^θ/σ^θ * kernel(s, β, θ) -1/(2*τ) * β'*diagm(λ.^(-2))*β
 end
 
 
@@ -190,15 +190,17 @@ function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<
 end"""
 
 
-# ALD
-function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real,
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing, σ₁::Real = 1; verbose = true)
+# convert to quantile estimates
+function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real, σ₁::Real,
+    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
     β = zeros(s.nMCMC, p)
     σ = [σ₁; zeros(s.nMCMC-1)]
     β[1,:] = typeof(β₁) <: Nothing ? inv(s.X'*s.X)*s.X'*s.y : β₁
     σ[1] = σ₁
+    β = zeros(s.nMCMC, p)
+    β[1,:] = typeof(β₁) <: Nothing ? inv(s.X'*s.X)*s.X'*s.y : β₁
 
     p = verbose && Progress(s.nMCMC-1, dt=0.5,
         barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
@@ -206,6 +208,7 @@ function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real,
 
     for i ∈ 2:s.nMCMC
         verbose && next!(p; showvalues=[(:iter,i) (:σ, round(σ[i-1], digits = 3))])
+        #β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ, σ)
         mcmcInner!(s, σ, θ, β, i, εᵦ)
     end
     return mcmcThin(σ, β, s)

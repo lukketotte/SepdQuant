@@ -214,19 +214,6 @@ function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real, 
     return mcmcThin(σ, β, s)
 end
 
-function mhβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
-    ∇ = ∂β(β, s, θ, σ)
-    #H = (∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
-    H = diagm([1 for i in 1:length(β)])
-    prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
-    ∇ₚ = ∂β(prop, s, θ, σ)
-    #Hₚ = (∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
-    Hₚ = diagm([1 for i in 1:length(β)])
-    αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
-    αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * ∇ₚ, ε^2 * Hₚ), β)
-    return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
-end
-
 function mcmcInner!(s::Sampler, σ::AbstractVector{<:Real}, θ::Real,
     β::AbstractMatrix{<:Real}, i::Int, εᵦ::Real)
         σ[i] = σ[i-1]#sampleσ(s, θ, β[i-1,:])

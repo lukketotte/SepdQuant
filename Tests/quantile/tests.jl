@@ -22,23 +22,23 @@ y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
 ##
-α = 0.1
-par = Sampler(y, X, α, 11000, 5, 1000);
+α = 0.9
+par = Sampler(y, X, α, 21000, 5, 6000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
-β, θ, σ = mcmc(par, .4, 0.4, 2.5, 4, b)
+β, θ, σ = mcmc(par, .6, 0.8, 1.2, 4, b)
 acceptance(β)
 plot(β[:,3])
 plot(θ)
 plot(cumsum(β[:,5]) ./ (1:size(β,1)))
-mean(θ)
-mean(σ)
+plot(cumsum(θ) ./ (1:size(β,1)))
 
-q = X * b
-μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1))
-τ = [quantconvert(q[j], mean(θ), α, μ[j], mean(σ)) for j in 1:length(par.y)] |> mean
 
-par = Sampler(y, X, τ, 51000, 1, 21000);
+q = X * b;
+μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], median(θ), α, μ[j], median(σ)) for j in 1:length(par.y)] |> mean
+
+par = Sampler(y, X, τ, 21000, 1, 6000);
 β, _ = mcmc(par, 1, mean(θ), mean(σ), b)
 plot(β[:,4])
 
@@ -46,10 +46,6 @@ acceptance(β)
 k = 3
 plot(cumsum(β[:,k]) ./ (1:size(β,1)))
 plot!([b[k] for i in 1:size(β,1)])
-
-
-mean(β, dims = 1) |> println
-b |> println
 
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
 [par.y[i] <= X[i,:] ⋅ mean(β, dims = 1)  for i in 1:length(y)] |> mean
@@ -100,7 +96,7 @@ x = rand(Normal(), n)
 y = 0.5 .+ 1.2 .* x + raepd(n, 2, 2, 0.7);
 X = hcat(ones(n), x)
 
-par = Sampler(y,X, 0.5, 21000, 5, 6000);
+par = Sampler(y, X, 0.5, 21000, 5, 6000);
 β, θ, σ, α = mcmc(par, 0.4, 0.4, 0.5, 1, 2, 0.5)
 acceptance(α)
 

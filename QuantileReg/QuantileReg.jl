@@ -208,7 +208,6 @@ function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real, 
 
     for i ∈ 2:s.nMCMC
         verbose && next!(p; showvalues=[(:iter,i) (:σ, round(σ[i-1], digits = 3))])
-        #β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ, σ)
         mcmcInner!(s, σ, θ, β, i, εᵦ)
     end
     return mcmcThin(σ, β, s)

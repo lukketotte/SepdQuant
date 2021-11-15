@@ -22,43 +22,57 @@ y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
 ##
-α = 0.9
+α = 0.8;
 par = Sampler(y, X, α, 21000, 5, 6000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
-β, θ, σ = mcmc(par, .6, 0.8, 1.2, 4, b)
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef;
+β, θ, σ = mcmc(par, .6, 1., 1.2, 4, b);
+
+β, θ, σ, α = mcmc(par, 0.4, .25, 1., 1, 2, 0.5);
+#plot(α)
+#acceptance(α)
+
 acceptance(β)
 plot(β[:,3])
 plot(θ)
-plot(cumsum(β[:,5]) ./ (1:size(β,1)))
+plot(cumsum(β[:,7]) ./ (1:size(β,1)))
 plot(cumsum(θ) ./ (1:size(β,1)))
 
+mean(θ)
+mean(σ)
+mean(α)
 
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef;
 q = X * b;
-μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1));
-τ = [quantconvert(q[j], median(θ), α, μ[j], median(σ)) for j in 1:length(par.y)] |> mean
+μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], median(θ), 0.493, μ[j], median(σ)) for j in 1:length(par.y)] |> mean
 
-par = Sampler(y, X, τ, 21000, 1, 6000);
-β, _ = mcmc(par, 1, mean(θ), mean(σ), b)
-plot(β[:,4])
-
+par = Sampler(y, X, τ, 11000, 5, 1000);
+βres, _ = mcmc(par, 1., mean(θ), mean(σ), b)
+plot(β[:,6])
 acceptance(β)
-k = 3
-plot(cumsum(β[:,k]) ./ (1:size(β,1)))
-plot!([b[k] for i in 1:size(β,1)])
+
 
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
-[par.y[i] <= X[i,:] ⋅ mean(β, dims = 1)  for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(y)] |> mean
 
-
-N = 500
+α = 0.8
+N = 2000
 bs = zeros(N)
 B = zeros(N, length(b))
 for i ∈ 1:N
     ids = sample(1:length(par.y), length(par.y))
     B[i,:] =  DataFrame(hcat(par.y[ids], par.X[ids,:]), :auto) |> x ->
-        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
+qreg(@formula(x1 ~ x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
 end
+
+[sort(βres, dims = 1)[Integer(round((1-0.05/2) * size(βres, 1))), j] for j in 1:9] -
+[sort(βres, dims = 1)[Integer(round((0.05/2) * size(βres, 1))), j] for j in 1:9] |> println
+
+[sort(B, dims = 1)[Integer(round((1-0.05/2) * size(B, 1))), j] for j in 1:9] -
+[sort(B, dims = 1)[Integer(round((0.05/2) * size(B, 1))), j] for j in 1:9] |> println
 
 ##
 α = range(0.01, 0.99, length = 101);

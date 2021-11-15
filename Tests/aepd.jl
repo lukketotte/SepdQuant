@@ -39,9 +39,9 @@ pdf(d::Aepd, x::Real) = exp(logpdf(d, x))
 function rand(rng::AbstractRNG, d::Aepd)
     μ, σ, p, α = params(d)
     if rand(rng) < d.α
-        μ + σ * α * rand(Gamma(1/p, 1))^(1/p) / (2*gamma(1+1/p))
+        - μ - σ * α * rand(Gamma(1/p, 1))^(1/p) / (gamma(1+1/p))
     else
-        μ + σ * (1-α) * rand(Gamma(1/p, 1))^(1/p) / (2*gamma(1+1/p))
+        μ + σ * (1-α) * rand(Gamma(1/p, 1))^(1/p) / (gamma(1+1/p))
     end
 end
 

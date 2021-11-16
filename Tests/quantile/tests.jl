@@ -22,11 +22,13 @@ y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
 ##
-α = 0.5;
-par = Sampler(y, X, α, 30000, 5, 5000);
+α = 0.1;
+par = Sampler(y, X, α, 20000, 5, 5000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef;
 β, θ, σ = mcmc(par, .6, 1., 1.2, 4, b);
+
+
 
 β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, b);
 plot(α)
@@ -38,28 +40,31 @@ plot(cumsum(β[:,2]) ./ (1:size(β,1)))
 plot(cumsum(θ) ./ (1:size(β,1)))
 plot(cumsum(α) ./ (1:size(β,1)))
 
-median(θ)#1.91
-median(σ)#4.10
-median(α)#0.443
+median(θ)#1.9
+median(σ)#4.07
+median(α)#0.445
 
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.2) |> coef;
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.7) |> coef;
 q = X * b;
 μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 τ = [quantconvert(q[j], median(θ), 0.488, μ[j],
     median(σ)) for j in 1:length(par.y)] |> mean
 
-b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.1) |> coef;
 par = Sampler(y, X, τ, 11000, 5, 2000);
-βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.9) |> coef;
+βres, _ = mcmc(par, 1.3, 1.899, 4.07, b);
 plot(βres[:,3])
 acceptance(βres)
-
+plot(cumsum(βres[:,6]) ./ (1:size(βres,1)))
 
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
-[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+X*median(βres, dims = 1)'
+X*b
 
 α = 0.8
 N = 2000

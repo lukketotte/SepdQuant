@@ -7,7 +7,7 @@ using .QuantileReg, .AEPD
 n = 5000
 p, a, s = 1.21, 0.1, 1
 
-p, a, s = 1.82, 0.49, 4.13
+p, a, s = 1.9, 0.444, 4.07
 p, a, s = median(θ), median(α), median(σ)
 dat = rand(Aepd(0, s, p, a), n)
 
@@ -17,11 +17,11 @@ bet, _ =  mcmc(par2, 1., p, s, init);
 acceptance(bet)
 plot(bet[:,1])
 
-n = 5000
-res = zeros(250)
-for i in 1:250
+n = 1000
+res = zeros(1000)
+for i in 1:1000
     dat = rand(Aepd(0, s, p, a), n)
-    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.1) |> coef;
+    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.9) |> coef;
     res[i] = quantconvert(q[1], p, a, 0, s)
 end
 τ = mean(res)

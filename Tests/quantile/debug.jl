@@ -35,3 +35,49 @@ par2.α = τ
 
 mean(par2.y .< median(bet[:,1]))
 mean(par2.y .< q[1])
+
+## double check (this might be the real way to make a point actually)
+n = 1000;
+x = rand(Normal(), n);
+# 2.5, 1.5
+y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 0.7, 0.7), n);
+X = hcat(ones(n), x)
+
+α = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+res3 = zeros(length(α))
+for i ∈ 1:length(α)
+    par = Sampler(y, X, α[i], 5000, 4, 1000);
+    b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~ x3), x, α[i]) |> coef;
+    β, _, _ = mcmc(par, 1., 1., 1.2, 4, b);
+    res3[i] = abs(α[i] - ([par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean))
+end
+
+plot(α, res, label = "p = 2.5")
+plot!(α, res2, label = "p = 1.5")
+plot!(α, res3, label = "p = 0.7")
+
+par = Sampler(y, X, α, 5000, 4, 1000);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~ x3), x, α) |> coef;
+β, θ, σ = mcmc(par, 1., 1., 1.2, 4, b);
+[par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
+acceptance(β)
+plot(σ)
+plot(θ)
+plot(β[:,2])
+
+β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, b);
+q = X * b;
+μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], median(θ), median(α), μ[j],
+    median(σ)) for j in 1:length(par.y)] |> mean
+
+par = Sampler(y, X, τ, 6000, 5, 1000);
+βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+
+acceptance(βres)
+
+[par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean

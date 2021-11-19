@@ -1,7 +1,7 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ForwardDiff
 
 include("../../QuantileReg/QuantileReg.jl")
-include("../../aepd.jl")
+include("../aepd.jl")
 using .QuantileReg, .AEPD
 
 n = 5000
@@ -40,20 +40,25 @@ mean(par2.y .< q[1])
 n = 1000;
 x = rand(Normal(), n);
 # 2.5, 1.5
-y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 0.7, 0.7), n);
+y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 2., 0.7), n);
 X = hcat(ones(n), x)
 
+reps = 10
 α = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
 res3 = zeros(length(α))
 for i ∈ 1:length(α)
-    par = Sampler(y, X, α[i], 5000, 4, 1000);
-    b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-        qreg(@formula(x1 ~ x3), x, α[i]) |> coef;
-    β, _, _ = mcmc(par, 1., 1., 1.2, 4, b);
-    res3[i] = abs(α[i] - ([par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean))
+    temp = 0
+    for j in 1:reps
+        par = Sampler(y, X, α[i], 5000, 4, 1000)
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+            qreg(@formula(x1 ~ x3), x, α[i]) |> coef
+        β, _, _ = mcmc(par, 1., 1., 1.2, 4, b)
+        temp += abs(α[i] - ([par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean))/reps
+    end
+    res3[i] = temp
 end
 
-plot(α, res, label = "p = 2.5")
+plot(α, res3, label = "p = 2.")
 plot!(α, res2, label = "p = 1.5")
 plot!(α, res3, label = "p = 0.7")
 
@@ -81,3 +86,20 @@ acceptance(βres)
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+##
+p, α, σ = 2, 0.7, 1
+d = Aepd(2, σ*gamma(1+1/p) , p, α)
+x = rand(d, 100000)
+mean(x)
+centralmoment(d, 1)
+mean(x.^3)
+centralmoment(d, 2)
+var(x)
+centralmoment(d, 2) - centralmoment(d, 1)^2
+centralmoment(d, 3)
+
+function centralmoment(d, k)
+    a = ((-1)^k*d.α^(1+k) + (1-α)^(1+k))
+    σ * a * gamma((1+k)/d.p) / gamma(1/p)
+end

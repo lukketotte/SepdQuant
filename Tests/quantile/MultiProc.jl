@@ -17,6 +17,35 @@ using Formatting
     1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
 end
 
+## Quantile with misspecified τ
+n = 1000;
+x = rand(Normal(), n);
+X = hcat(ones(n), x)
+
+α = range(0.1, 0.9, length = 17) |> Vector
+res3 = SharedArray{Float64}(length(α))
+reps = 50
+@sync @distributed for i ∈ 1:length(α)
+    temp = 0
+    for j in 1:reps
+        y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 0.7, 0.7), n);
+        par = Sampler(y, X, α[i], 5000, 4, 1000)
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+            qreg(@formula(x1 ~ x3), x, α[i]) |> coef
+        β, _, _ = mcmc(par, 1., 1., 1.2, 4, b)
+        temp += abs(α[i] - ([par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean))/reps
+    end
+    res3[i] = temp
+end
+
+vcat(hcat(res, α, [2. for i in 1:17]), hcat(res2, α, [1.5 for i in 1:17]),
+    hcat(res3, α, [1. for i in 1:17])) |> x ->
+    DataFrame(x, ["diff", "quant", "p"]) #|> x -> CSV.write("quantest.csv", x)
+
+
+plot!(α, res3)
+
+##
 α = range(0.01, 0.99, length = 101);
 p = [0.75, 1.5, 2, 3];
 ε = [0.05, 0.2, 0.1, 0.05];

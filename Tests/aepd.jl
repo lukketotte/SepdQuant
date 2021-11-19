@@ -25,9 +25,6 @@ Aepd(μ::Real, σ::Real, p::Real, α::Real) = Aepd(promote(μ, σ, p, α)...)
 
 params(d::Aepd) = (d.μ, d.σ, d.p, d.α)
 
-function δ(p, α)::Real
-    2*α^p*(1-α)^p / (α^p + (1-α)^p)
-end
 
 function logpdf(d::Aepd, x::Real)
     μ, σ, p, α = params(d)
@@ -39,7 +36,7 @@ pdf(d::Aepd, x::Real) = exp(logpdf(d, x))
 function rand(rng::AbstractRNG, d::Aepd)
     μ, σ, p, α = params(d)
     if rand(rng) < d.α
-        - μ - σ * α * rand(Gamma(1/p, 1))^(1/p) / (gamma(1+1/p))
+        μ - σ * α * rand(Gamma(1/p, 1))^(1/p) / (gamma(1+1/p))
     else
         μ + σ * (1-α) * rand(Gamma(1/p, 1))^(1/p) / (gamma(1+1/p))
     end

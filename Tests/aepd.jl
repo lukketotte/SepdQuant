@@ -28,7 +28,7 @@ params(d::Aepd) = (d.μ, d.σ, d.p, d.α)
 
 function logpdf(d::Aepd, x::Real)
     μ, σ, p, α = params(d)
-    -log(σ) - (gamma(1+1/p)/σ)^p * (x < μ ? ((μ-x)/α)^p : ((x-μ)/(1-α))^p)
+    -log(σ) - 1/(2*p) * (x < μ ? ((μ-x)/α)^p : ((x-μ)/(1-α))^p)
 end
 
 pdf(d::Aepd, x::Real) = exp(logpdf(d, x))

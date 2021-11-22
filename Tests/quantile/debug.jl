@@ -2,7 +2,8 @@ using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ForwardDiff
 
 include("../../QuantileReg/QuantileReg.jl")
 include("../aepd.jl")
-using .QuantileReg, .AEPD
+using .QuantileReg, .AEPD,
+
 
 n = 5000
 p, a, s = 1.21, 0.1, 1

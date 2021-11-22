@@ -45,19 +45,19 @@ median(σ)#4.07
 median(α)#0.445
 
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.7) |> coef;
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef;
 q = X * b;
 μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
-τ = [quantconvert(q[j], median(θ), 0.488, μ[j],
-    median(σ)) for j in 1:length(par.y)] |> mean
+τ = [quantconvert(q[j], 1.96, 0.397, μ[j],
+    3.98) for j in 1:length(par.y)] |> mean
 
-par = Sampler(y, X, τ, 11000, 5, 2000);
+par = Sampler(y, X, τ, 10000, 2, 5000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.9) |> coef;
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef;
 βres, _ = mcmc(par, 1.3, 1.899, 4.07, b);
-plot(βres[:,3])
+plot(βres[:,6])
 acceptance(βres)
-plot(cumsum(βres[:,6]) ./ (1:size(βres,1)))
+plot(cumsum(βres[:,7]) ./ (1:size(βres,1)))
 
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
@@ -66,7 +66,7 @@ plot(cumsum(βres[:,6]) ./ (1:size(βres,1)))
 X*median(βres, dims = 1)'
 X*b
 
-α = 0.8
+α = 0.5
 N = 2000
 bs = zeros(N)
 B = zeros(N, length(b))
@@ -76,11 +76,16 @@ for i ∈ 1:N
 qreg(@formula(x1 ~ x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
 end
 
-[sort(βres, dims = 1)[Integer(round((1-0.05/2) * size(βres, 1))), j] for j in 1:9] -
-[sort(βres, dims = 1)[Integer(round((0.05/2) * size(βres, 1))), j] for j in 1:9] |> println
+vcat(DataFrame(param = colnames,
+        value =[median(B[:, j]) for j in 1:size(X)[2]],
+        l = [sort(B, dims = 1)[Integer(round((0.05/2) * size(B, 1))), j] for j in 1:size(X)[2]],
+        u =  [sort(B, dims = 1)[Integer(round(((1-0.05/2)) * size(B, 1))), j] for j in 1:size(X)[2]], α = α, est = "Ald"),
+    DataFrame(param = colnames,
+        value =[median(βres[:, j]) for j in 1:size(X)[2]],
+        l = [sort(βres, dims = 1)[Integer(round((0.05/2) * size(βres, 1))), j] for j in 1:size(X)[2]],
+        u =  [sort(βres, dims = 1)[Integer(round(((1-0.05/2)) * size(βres, 1))), j] for j in 1:size(X)[2]], α = α, est = "Aepd")
+) |> x -> CSV.write("ci_05.csv", x)
 
-[sort(B, dims = 1)[Integer(round((1-0.05/2) * size(B, 1))), j] for j in 1:9] -
-[sort(B, dims = 1)[Integer(round((0.05/2) * size(B, 1))), j] for j in 1:9] |> println
 
 ##
 α = range(0.01, 0.99, length = 101);

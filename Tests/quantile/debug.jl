@@ -21,7 +21,7 @@ n = 1000
 res = zeros(1000)
 for i in 1:1000
     dat = rand(Aepd(0, s, p, a), n)
-    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.9) |> coef;
+    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.5) |> coef;
     res[i] = quantconvert(q[1], p, a, 0, s)
 end
 τ = mean(res)

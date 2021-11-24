@@ -3,7 +3,7 @@ include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
 
-using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
+using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, KernelDensity
 theme(:juno)
 
 f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
@@ -66,15 +66,20 @@ plot(cumsum(βres[:,7]) ./ (1:size(βres,1)))
 X*median(βres, dims = 1)'
 X*b
 
-α = 0.5
-N = 2000
+α = 0.9
+N = 2*5000
 bs = zeros(N)
-B = zeros(N, length(b))
+B = zeros(N, size(X, 2))
 for i ∈ 1:N
     ids = sample(1:length(par.y), length(par.y))
     B[i,:] =  DataFrame(hcat(par.y[ids], par.X[ids,:]), :auto) |> x ->
-qreg(@formula(x1 ~ x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
+    qreg(@formula(x1 ~ x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
 end
+
+p = 2
+res = kde(B[:,p])
+x = range(minimum(B[:,p]), maximum(B[:,p]), length = 500)
+plot!(x, pdf(res, x))
 
 vcat(DataFrame(param = colnames,
         value =[median(B[:, j]) for j in 1:size(X)[2]],

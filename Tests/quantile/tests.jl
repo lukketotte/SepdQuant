@@ -22,8 +22,8 @@ y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
 ##
-α = 0.1;
-par = Sampler(y, X, α, 20000, 5, 5000);
+α = 0.5;
+par = Sampler(y, X, α, 50000, 5, 10000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef;
 β, θ, σ = mcmc(par, .6, 1., 1.2, 4, b);
@@ -36,13 +36,20 @@ acceptance(θ)
 acceptance(β)
 plot(β[:,3])
 plot(θ)
-plot(cumsum(β[:,2]) ./ (1:size(β,1)))
+plot(cumsum(β[:,4]) ./ (1:size(β,1)))
 plot(cumsum(θ) ./ (1:size(β,1)))
 plot(cumsum(α) ./ (1:size(β,1)))
 
 median(θ)#1.9
 median(σ)#4.07
 median(α)#0.445
+
+names(dat)
+
+hcat(θ, σ, α, β[:, 4]) |> x -> DataFrame(x, [''])
+CSV.write("mcmc.csv", DataFrame(shape = θ, scale = σ, skewness = α, beta = β[:,4])) 
+
+plot(β[:,4])
 
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef;

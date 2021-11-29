@@ -41,7 +41,7 @@ function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
     return -log(θ) + loggamma(n/θ) - (n/θ) * log(a) + log(πθ(θ))
 end
 
-function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real; trunc = 0.5)
+function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real; trunc = 1.)
     prop = rand(Truncated(Normal(θ, ε^2), trunc, Inf))
     a = logpdf(Truncated(Normal(prop, ε^2), trunc, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), trunc, Inf), prop)
     return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
@@ -85,7 +85,8 @@ function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, �
     ∇ₚ = ∂β(prop, s, θ, σ)
     Hₚ = (∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
     αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
-    αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * H * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * Hₚ * ∇ₚ, ε^2 * Hₚ), β)
+    αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * H * ∇, ε^2 * H), prop)
+    αᵦ += logpdf(MvNormal(prop + ε^2/2 * Hₚ * ∇ₚ, ε^2 * Hₚ), β)
     return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
 

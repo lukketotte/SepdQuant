@@ -21,14 +21,14 @@ function Aepd(µ::T, σ::T, p::T, α::T; check_args=true) where {T <: Real}
     return Aepd{T}(µ, σ, p, α)
 end
 
-Aepd(μ::Real, σ::Real, p::Real, α::Real) = Aepd(promote(μ, σ, p, α)...)
+Aepd(μ::Real, σ::Real, p::Real, α::Real) = Aepd( promote(μ, σ, p, α)...)
 
 params(d::Aepd) = (d.μ, d.σ, d.p, d.α)
 
 
 function logpdf(d::Aepd, x::Real)
     μ, σ, p, α = params(d)
-    -log(σ) - 1/(2*p) * (x < μ ? ((μ-x)/α)^p : ((x-μ)/(1-α))^p)
+    -log(σ) - gamma(1+1/p)^p * (x < μ ? ((μ-x)/(α*σ))^p : ((x-μ)/((1-α)*σ))^p)
 end
 
 pdf(d::Aepd, x::Real) = exp(logpdf(d, x))

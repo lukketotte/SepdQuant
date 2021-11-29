@@ -18,24 +18,54 @@ bet, _ =  mcmc(par2, 1., p, s, init);
 acceptance(bet)
 plot(bet[:,1])
 
-n = 1000
-res = zeros(1000)
-for i in 1:1000
+n = 500
+N = 10000
+res = zeros(N)
+for i in 1:N
     dat = rand(Aepd(0, s, p, a), n)
-    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.5) |> coef;
+    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.1) |> coef;
     res[i] = quantconvert(q[1], p, a, 0, s)
 end
 τ = mean(res)
 
-dat = rand(Aepd(0, s, p, a), n)
-q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.7) |> coef;
-τ = quantconvert(q[1], p, a, 0, s)
 
+y = rand(Aepd(0, s, p, a), 100000)
+q = DataFrame(hcat(y), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.9) |> coef;
 
-par2.α = τ
+1/((mean(abs.(y - ones(length(y)) .* q).^(p-1)) / mean(abs.(y - ones(length(y)) .* q).^(p-1) .* (y .<= q)) - 1)^(1/p) + 1)
 
-mean(par2.y .< median(bet[:,1]))
-mean(par2.y .< q[1])
+##
+n = 5000;
+x = rand(Normal(), n);
+y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1., 1.5, 0.2), n);
+X = hcat(ones(n), x)
+
+par = Sampler(y, X, 0.2, 10000, 5, 1000);
+β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3), x, 0.9) |> coef;
+q = X * b;
+μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], median(θ), median(α), μ[j],
+    median(σ)) for j in 1:length(par.y)] |> mean
+
+par = Sampler(y, X, τ, 10000, 2, 5000);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~  x3), x, 0.9) |> coef;
+βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+
+[par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+n = 2000
+res = zeros(n)
+for i in 1:n
+    dat = rand(Aepd(0, 1, 2, 0.7), n)
+    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.1) |> coef;
+    res[i] = quantconvert(q[1], p, a, 0, s)
+end
+τ = mean(res)
 
 ## double check (this might be the real way to make a point actually)
 n = 1000;
@@ -87,20 +117,3 @@ acceptance(βres)
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
-
-##
-p, α, σ = 2, 0.7, 1
-d = Aepd(2, σ*gamma(1+1/p) , p, α)
-x = rand(d, 100000)
-mean(x)
-centralmoment(d, 1)
-mean(x.^3)
-centralmoment(d, 2)
-var(x)
-centralmoment(d, 2) - centralmoment(d, 1)^2
-centralmoment(d, 3)
-
-function centralmoment(d, k)
-    a = ((-1)^k*d.α^(1+k) + (1-α)^(1+k))
-    σ * a * gamma((1+k)/d.p) / gamma(1/p)
-end

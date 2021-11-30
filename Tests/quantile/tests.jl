@@ -22,46 +22,39 @@ y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
 ##
-α = 0.5;
-par = Sampler(y, X, 0.8, 20000, 5, 5000);
+par = Sampler(y, X, 0.5, 20000, 5, 10000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef;
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef;
 βt, _, _ = mcmc(par, .6, 1., 1.2, 4, b);
 
-[par.y[i] <= X[i,:] ⋅ median(βt, dims = 1) for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βt, dims = 1) for i in 1:length(par.y)] |> mean
 
-β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, b);
+β, θ, σ, α = mcmc(par, 0.8, .35, 1.5, 1, 2, 0.5, b);
 median(θ)#1.9
 median(σ)#4.07
 median(α)#0.445
+plot(α)
+
 #hcat(θ, σ, α, β[:, 4]) |> x -> DataFrame(x, [''])
 #CSV.write("mcmc.csv", DataFrame(shape = θ, scale = σ, skewness = α, beta = β[:,4]))
-k = kde(par.y)
-x = range(minimum(par.y)-1, maximum(par.y), length = 500)
-histogram(par.y, normalize = true)
-plot!(x, pdf(k, x))
+
 
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.1) |> coef;
-q = X * b;
-μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.9) |> coef;
+q = par.X * b;
+μ = par.X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 τ = [quantconvert(q[j], median(θ), median(α), μ[j],
     median(σ)) for j in 1:length(par.y)] |> mean
 
-par = Sampler(y, X, τ, 10000, 2, 5000);
+par.α = τ
+#βres, _ = mcmc(par, 1.3, 1.89, 4.06, b);
 βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
 plot(βres[:,1])
 acceptance(βres)
-plot(cumsum(βres[:,7]) ./ (1:size(βres,1)))
-println(median(βres, dims = 1))
+plot(cumsum(βres[:,4]) ./ (1:size(βres,1)))
 
-[par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
-[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
-
-
-
-X*median(βres, dims = 1)'
-X*b
+[par.y[i] <= par.X[i,:] ⋅ b for i in 1:length(par.y)] |> mean
+[par.y[i] <= par.X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
 
 α = 0.9
 N = 2*5000
@@ -109,41 +102,3 @@ plot(α, τ)
 plot!(α, α)
 
 ##
-
-
-
-α = range(0.01, 0.99, length = 101);
-# normal
-p = [0.75, 1.5, 2, 3];
-ε = [0.05, 0.2, 0.1, 0.05];
-
-# Laplace
-p = [0.75, 1.25, 1.5];
-ε = [0.025, 0.1, 0.1];
-n = 1000;
-x = rand(Normal(), n)
-y = 0.5 .+ 1.2 .* x + raepd(n, 2, 2, 0.7);
-X = hcat(ones(n), x)
-
-par = Sampler(y, X, 0.5, 21000, 5, 6000);
-β, θ, σ, α = mcmc(par, 0.4, 0.4, 0.5, 1, 2, 0.5)
-acceptance(α)
-
-plot(α)
-plot(θ)
-plot(σ)
-plot(β[:,1])
-
-β1 = (DataFrame(hcat(y, ones(n), x), :auto) |> x -> qreg(@formula(x1 ~  x3), x, 0.9) |> coef)
-β2 = [mean(β[:,i]) for i in 1:size(β, 2)]
-
-τ = [quantconvert(X[i,:] ⋅ β1, mean(θ), mean(α), X[i,:] ⋅ β2, mean(σ)) for i in 1:n] |> mean
-
-par = Sampler(y,X, τ, 21000, 5, 6000);
-β, θ, σ= mcmc(par, 0.4, 0.5, 1, 2)
-β2 = [mean(β[:,i]) for i in 1:size(β, 2)]
-
-[y[i] <= X[i,:] ⋅ β2 for i in 1:length(y)] |> mean
-[y[i] <= X[i,:] ⋅ β1 for i in 1:length(y)] |> mean
-
-println(β2)

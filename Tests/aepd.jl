@@ -21,7 +21,7 @@ function Aepd(µ::T, σ::T, p::T, α::T; check_args=true) where {T <: Real}
     return Aepd{T}(µ, σ, p, α)
 end
 
-Aepd(μ::Real, σ::Real, p::Real, α::Real) = Aepd( promote(μ, σ, p, α)...)
+Aepd(μ::Real, σ::Real, p::Real, α::Real) = Aepd(promote(μ, σ, p, α)...)
 
 params(d::Aepd) = (d.μ, d.σ, d.p, d.α)
 

@@ -17,6 +17,57 @@ using Formatting
     1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
 end
 
+## Simulation study with AEPD error term
+n = 2000;
+x = rand(Normal(), n);
+X = hcat(ones(n), x)
+
+
+p = [1.5, 2., 2.5]
+skew = [0.2, 0.8, 0.5]
+quant = range(0.1, 0.9, length = 3)
+
+settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner = length(quant)),
+    skew = repeat(skew, length(p)) |> x -> repeat(x, inner = length(quant)),
+    tau = repeat(quant, length(skew) * length(p)),
+    convertTau = 0, old = 0,  sdOld = 0, bayes = 0, sdBayes = 0)
+cols = names(settings)
+settings = SharedArray(Matrix(settings))
+reps = 50
+
+@sync @distributed for i ∈ 1:size(settings, 1)
+    p, skew, τ = settings[i, 1:3]
+    old, bayes, convertTau = [zeros(reps) for i in 1:3]
+    for j ∈ 1:reps
+        y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, p, skew), n);
+        par = Sampler(y, X, skew, 6000, 5, 1000);
+        β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
+        μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+            qreg(@formula(x1 ~  x3), x, τ) |> coef;
+        q = X * b;
+        convertTau[j] = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
+
+        par.α = convertTau[j]
+        βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+
+        par.α = τ
+        βt, _, _ = mcmc(par, .6, 1., 1.2, 4, b);
+
+        bayes[j] = [par.y[k] <= X[k,:] ⋅ median(βres, dims = 1)  for k in 1:length(par.y)] |> mean
+        old[j] = [par.y[k] <= X[k,:] ⋅ median(βt, dims = 1)  for k in 1:length(par.y)] |> mean
+    end
+    settings[i, 4] = mean(convertTau)
+    settings[i, 5] = mean(old)
+    settings[i, 6] = √var(old)
+    settings[i, 7] = mean(bayes)
+    settings[i, 8] = √var(bayes)
+end
+
+plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
+CSV.write("sims.csv", plt_dat)
+
 ## Quantile with misspecified τ
 n = 1000;
 x = rand(Normal(), n);

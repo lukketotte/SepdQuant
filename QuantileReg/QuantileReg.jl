@@ -16,7 +16,7 @@ end
 function Sampler(y::AbstractVector{T}, X::AbstractMatrix{M}, α::Real, nMCMC::Int, thin::Int, burnIn::Int) where {T,M <: Real}
     nMCMC > 0 || thin > 0 || burnIn > 0 || throw(DomainError("Integers can't be negative"))
     α > 0 || α < 1 || throw(DomainError("α ∉ (0,1)"))
-    y = T <: Int ?  log.(y + rand(Uniform(), length(y)) .- α) : y
+    y = T <: Int ?  log.(y + rand(Uniform(), length(y))) : y
     length(y) === size(X)[1] || throw(DomainError("Size of y and X not matching"))
     Sampler{T, M, typeof(y), typeof(X)}(y, X, α, nMCMC, thin, burnIn)
 end
@@ -48,7 +48,7 @@ function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real; tr
 end
 
 function αcond(α::Real, s::Sampler, θ::Real, σ::Real, β::AbstractVector{<:Real})
-    return - gamma(1+1/θ)^θ/σ * kernel(s, β, θ, α)
+    return - (gamma(1+1/θ)/σ)^θ * kernel(s, β, θ, α)
 end
 
 function sampleα(s::Sampler, ε::Real, θ::Real, σ::Real, β::AbstractVector{<:Real})
@@ -216,7 +216,7 @@ end
 
 function mcmcInner!(s::Sampler, σ::AbstractVector{<:Real}, θ::Real,
     β::AbstractMatrix{<:Real}, i::Int, εᵦ::Real)
-        σ[i] = σ[i-1]#sampleσ(s, θ, β[i-1,:])
+        σ[i] = σ[i-1]# sampleσ(s, θ, β[i-1,:])
         β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ, σ[i])
         nothing
 end

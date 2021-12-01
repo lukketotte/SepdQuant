@@ -66,7 +66,30 @@ reps = 50
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("sims.csv", plt_dat)
+#CSV.write("sims.csv", plt_dat)
+
+## Bootstrap τ on davids data?
+reps = 20
+res = SharedArray{Float64}(reps)
+quant = 0.9
+@sync @distributed for i ∈ 1:reps
+    println(i)
+    ids = sample(1:length(y), length(y); replace = true)
+    par = Sampler(y[ids], X[ids,:], 0.5, 10000, 5, 2000)
+    b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef
+    β, θ, σ, α = mcmc(par, 1.2, .35, 1.5, 1, 2, 0.5, b)
+
+    b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, quant) |> coef;
+    q = par.X * b;
+    μ = par.X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1))
+    res[i] = [quantconvert(q[j], median(θ), median(α), μ[j],
+        median(σ)) for j in 1:length(par.y)] |> mean
+end
+
+τ = mean(res)
+√var(res)
 
 ## Quantile with misspecified τ
 n = 1000;

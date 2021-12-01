@@ -1,5 +1,5 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ForwardDiff
-
+using KernelDensity
 include("../../QuantileReg/QuantileReg.jl")
 include("../aepd.jl")
 using .QuantileReg, .AEPD,
@@ -20,27 +20,36 @@ end
 par.y .- mean(par.y) |> mean
 mean(dat)
 
-dat = rand(Aepd(0, s, p, a), 10000)
-k = kde(dat .- mean(dat))
-x = range(-7, 7, length = 1000)
+dat = rand(Chisq(3), 10000)
+k = kde(dat)
+x = range(minimum(dat), maximum(dat), length = 1000)
 k2 = kde(par.y .- mean(par.y))
 
 plot(x, pdf(k, x))
 plot!(x, pdf(k2, x))
 
 
+
 ##
-n = 3000;
+n = 500;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
-y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 4.06, 1.9, 0.44), n);
+y = 2.1 .+ 0.5 .* x + rand(Erlang(7, 0.5), n)
+y = 2.1 .+ 0.5 .* x + rand(Gumbel(0, 1), n)
+y = 2.1 .+ 0.5 .* x + rand(InverseGaussian(1, 1), n) #εᵦ = 0.5, εₚ = 0.2?
+y = 2.1 .+ 0.5 .* x + rand(TDist(5), n)
+y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
 
-par = Sampler(y, X, 0.44, 10000, 5, 1000);
+acceptance(α)
+plot(β[:,2])
+plot(θ)
+
+par = Sampler(y, X, 0.44, 6000, 5, 1000);
 β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
 μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 
-quant = 0.1
+quant = 0.8
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3), x, quant) |> coef;
 q = X * b;
@@ -49,6 +58,7 @@ q = X * b;
 
 par.α = τ
 βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
 
 # their way
 par.α = quant
@@ -56,8 +66,7 @@ par.α = quant
 
 
 [par.y[i] <= X[i,:] ⋅ b for i in 1:length(y)] |> mean
-[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
-[par.y[i] <= X[i,:] ⋅ median(βt, dims = 1)  for i in 1:length(par.y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
 
 √var(βt[:,2])
 √var(βres[:,2])

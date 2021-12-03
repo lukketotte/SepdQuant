@@ -64,3 +64,74 @@ acceptance(α)
 plot(α)
 plot(θ)
 plot(β[:,6])
+
+## Fishery data
+using HTTP
+dat = HTTP.get("https://people.brandeis.edu/~kgraddy/datasets/fish.out") |> x -> CSV.File(x.body) |> DataFrame
+names(dat)
+
+y = dat[:,:qty]
+X = hcat(ones(length(y)), dat[:,:price])
+
+par = Sampler(y, X, 0.5, 10000, 1, 5000);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, 0.5) |> coef;
+
+β, θ, σ, α = mcmc(par, 1, 0.25, 0.7, 1, 2, 0.5, b);
+
+q = par.X * (DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, 0.4) |> coef);
+μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], median(θ), median(α), μ[j], median(σ)) for j in 1:length(par.y)] |> mean
+
+par = Sampler(y, X, τ, 10000, 1, 5000);
+
+n = 2000
+s,p,a = median(σ), median(θ), median(α)
+res = zeros(n)
+for i in 1:n
+    dat = rand(Aepd(0, s, p, a), n)
+    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.4) |> coef;
+    res[i] = quantconvert(q[1], p, a, 0, s)
+end
+par.α = mean(res)
+
+βres, _ = mcmc(par, 0.4, median(θ), median(σ), b);
+plot(βres[:,2])
+
+[par.y[i] <= q[i] for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+## Prostate data
+dat = load(string(pwd(), "/Tests/data/prostate.csv")) |> DataFrame;
+names(dat)
+y = dat[:, :lpsa]
+X = hcat(ones(length(y)), Matrix(dat[:,2:9]))
+
+par = Sampler(y, X, 0.5, 10000, 1, 5000);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef;
+
+β, θ, σ, α = mcmc(par, 1, 0.25, 0.7, 1, 2, 0.5, b);
+acceptance(β)
+acceptance(α)
+plot(σ)
+plot(β[:,2])
+plot(θ)
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.1) |> coef;
+q = par.X * b
+
+n = 2000
+s,p,a = median(σ), median(θ), median(α)
+res = zeros(n)
+for i in 1:n
+    dat = rand(Aepd(0, s, p, a), n)
+    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.1) |> coef;
+    res[i] = quantconvert(q[1], p, a, 0, s)
+end
+par.α = mean(res)
+
+βres, _ = mcmc(par, 0.00005, median(θ), median(σ), b);
+plot(βres[:,4])
+acceptance(βres)
+
+[par.y[i] <= q[i] for i in 1:length(y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean

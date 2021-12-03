@@ -31,25 +31,33 @@ plot!(x, pdf(k2, x))
 
 
 ##
-n = 500;
+n = 2000;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
-y = 2.1 .+ 0.5 .* x + rand(Erlang(7, 0.5), n)
-y = 2.1 .+ 0.5 .* x + rand(Gumbel(0, 1), n)
-y = 2.1 .+ 0.5 .* x + rand(InverseGaussian(1, 1), n) #εᵦ = 0.5, εₚ = 0.2?
-y = 2.1 .+ 0.5 .* x + rand(TDist(5), n)
+y = 2.1 .+ 0.5 .* x + rand(Erlang(7, 0.5), n);
+y = 2.1 .+ 0.5 .* x + rand(Gumbel(0, 1), n);
+y = 2.1 .+ 0.5 .* x + rand(InverseGaussian(1, 1), n); # skip
+y = 2.1 .+ 0.5 .* x + rand(TDist(5), n);
 y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
 
 acceptance(α)
+acceptance(β)
 plot(β[:,2])
 plot(θ)
+plot(α)
 
-par = Sampler(y, X, 0.44, 6000, 5, 1000);
+
+
+par = Sampler(y, X, 0.5, 6000, 5, 1000);
 β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
+par.α = 0.1
+β, θ, σ = mcmc(par, .8, .25, 1., 2, [2.1, 0.5]);
+
+
 μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 
-quant = 0.8
+quant = 0.1
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3), x, quant) |> coef;
 q = X * b;
@@ -58,7 +66,7 @@ q = X * b;
 
 par.α = τ
 βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
-[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
 
 # their way
 par.α = quant

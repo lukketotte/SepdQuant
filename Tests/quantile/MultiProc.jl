@@ -68,6 +68,63 @@ end
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
 #CSV.write("sims.csv", plt_dat)
 
+# simulation with other random errors
+quant = [0.1, 0.5, 0.9]
+#dists = ["Gumbel", "Erlang", "Tdist", "Chi"]
+dists = [1,2,3,4]
+settings = DataFrame(tau = repeat(quant, length(dists)), dist = repeat(dists, inner = length(quant)),
+    p = 0, bayes = 0, sdBayes = 0, old = 0, sdOld = 0)
+
+cols = names(settings)
+settings = SharedArray(Matrix(settings))
+reps = 50
+
+@sync @distributed for i ∈ 1:size(settings, 1)
+    old, bayes, p = [zeros(reps) for i in 1:3]
+    for j ∈ 1:reps
+        if settings[i, 2] == 1 #"Gumbel"
+            y = 2.1 .+ 0.5 .* x + rand(Gumbel(0, 1), n)
+            ε = [0.6, 1]
+        elseif settings[i, 2] == 2#"Erlang"
+            y = 2.1 .+ 0.5 .* x + rand(Erlang(7, 0.5), n)
+            ε = [0.6, 1]
+        elseif settings[i, 2] == 3#"Tdist"
+            y = 2.1 .+ 0.5 .* x + rand(TDist(5), n)
+            ε = [0.6, 0.25]
+        else #"Chi"
+            y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
+            ε = [0.6, 0.5]
+        end
+
+        par = Sampler(y, X, 0.5, 8000, 5, 2000);
+        β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
+        μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+            qreg(@formula(x1 ~  x3), x, settings[i, 1]) |> coef;
+        q = X * b;
+        τ = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
+
+        par.α = τ
+        βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+
+        par.α = settings[i, 1]
+        βt, θ, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b);
+
+        bayes[j] = [par.y[k] <= X[k,:] ⋅ median(βres, dims = 1)  for k in 1:length(par.y)] |> mean
+        old[j] = [par.y[k] <= X[k,:] ⋅ median(βt, dims = 1)  for k in 1:length(par.y)] |> mean
+        p[j] = median(θ)
+        end
+    settings[i, 3] = mean(p)
+    settings[i, 6] = mean(old)
+    settings[i, 7] = √var(old)
+    settings[i, 4] = mean(bayes)
+    settings[i, 5] = √var(bayes)
+end
+
+plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother.csv", plt_dat)
+
 ## Bootstrap τ on davids data?
 reps = 20
 res = SharedArray{Float64}(reps)

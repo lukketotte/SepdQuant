@@ -9,6 +9,41 @@ theme(:juno)
 using RDatasets
 
 ## QuantileReg data
+dat = load(string(pwd(), "/Tests/data/Immunog.csv")) |> DataFrame;
+names(dat)
+y = dat[:, :IgG];
+X = hcat(ones(size(dat,1)), dat[:,:Age], dat[:,:Age].^2)
+
+par = Sampler(y, X, 0.5, 6000, 5, 2000);
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3 + x4), x, 0.5) |> coef;
+β, θ, σ, α = mcmc(par, 1.3, 0.5, 1.5, 2, 1, 0.5, b);
+
+plot(β[:,2])
+plot(σ)
+plot(θ)
+plot(α)
+acceptance(β)
+acceptance(θ)
+acceptance(α)
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, 0.9) |> coef;
+q = X * b;
+μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], mean(θ), mean(α), μ[j], mean(σ)) for j in 1:length(par.y)] |> mean
+
+par.α = mcτ(0.1, median(α), median(θ), median(σ))
+
+reps = 50
+res = zeros(reps)
+for i in 1:reps
+    βres, _ = mcmc(par, 2, median(θ), median(σ), b);
+    res[i] = ([par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean)
+end
+
+mean(res)
+
+##
 RDatasets.datasets("datasets")
 dat = dataset("datasets", "mtcars")
 
@@ -51,7 +86,7 @@ y = log.(dat[:, :MedV])
 X = dat[:, Not(["MedV"])] |> Matrix
 X = hcat([1 for i in 1:length(y)], X);
 
-par = Sampler(y, X, 0.5, 3000, 1, 1);
+par = Sampler(y, X, 0.5, 10000, 5, 2000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 +
         x11 + x12 + x13 + x14 + x15), x, 0.5) |> coef;
@@ -63,7 +98,21 @@ acceptance(θ)
 acceptance(α)
 plot(α)
 plot(θ)
-plot(β[:,6])
+plot(β[:,2])
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 +
+        x11 + x12 + x13 + x14 + x15), x, 0.1) |> coef;
+q = X * b;
+μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+τ = [quantconvert(q[j], median(θ), median(α), μ[j],
+    median(σ)) for j in 1:length(par.y)] |> mean
+
+par.α = τ;
+par.nMCMC = 4000
+βres, _ = mcmc(par, 0.01, median(θ), median(σ), b);
+plot(βres[:,1])
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
 
 ## Fishery data
 using HTTP

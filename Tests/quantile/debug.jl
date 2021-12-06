@@ -5,7 +5,10 @@ include("../aepd.jl")
 using .QuantileReg, .AEPD,
 
 p, a, s = 1.89, 0.444, 4.06
-p, a, s = median(θ), median(α), median(σ)
+p, a, s = mean(θ), mean(α), mean(σ)
+
+
+mcτ(0.1, median(α), median(θ), median(σ))
 
 n = 1000
 N = 1000
@@ -31,7 +34,7 @@ plot!(x, pdf(k2, x))
 
 
 ##
-n = 2000;
+n = 200;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
@@ -41,23 +44,23 @@ y = 2.1 .+ 0.5 .* x + rand(InverseGaussian(1, 1), n); # skip
 y = 2.1 .+ 0.5 .* x + rand(TDist(5), n);
 y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
 
+par = Sampler(y, X, 0.5, 10000, 5, 2000);
+β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
+
+par.α = 0.1
+β, θ, σ = mcmc(par, .8, 1., 1., 2, [2.1, 0.5]);
+
+
 acceptance(α)
 acceptance(β)
-plot(β[:,2])
+acceptance(θ)
+plot(β[:,1])
 plot(θ)
 plot(α)
 
-
-
-par = Sampler(y, X, 0.5, 6000, 5, 1000);
-β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
-par.α = 0.1
-β, θ, σ = mcmc(par, .8, .25, 1., 2, [2.1, 0.5]);
-
-
 μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 
-quant = 0.1
+quant = 0.9
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3), x, quant) |> coef;
 q = X * b;
@@ -65,8 +68,12 @@ q = X * b;
     median(σ)) for j in 1:length(par.y)] |> mean
 
 par.α = τ
+#par.α = mcτ(0.1, median(α), median(θ), median(σ))
 βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
-[par.y[i] <= X[i,:] ⋅ median(β, dims = 1)  for i in 1:length(par.y)] |> mean
+[par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+acceptance(βres)
+plot(βres[:,2])
 
 # their way
 par.α = quant

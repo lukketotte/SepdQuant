@@ -14,6 +14,18 @@ function quantconvert(q, p, α, μ, σ)
     1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
 end
 
+function mcτ(τ, α, p, σ, n = 1000, N = 1000)
+    res = zeros(N)
+    for i in 1:N
+        dat = rand(Aepd(0, σ, p, α), n)
+        q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, τ) |> coef;
+        res[i] = quantconvert(q[1], p, α, 0, σ)
+    end
+    mean(res)
+end
+
+##
+
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
 y = dat[:, :osvAll]
 X = dat[:, Not(["osvAll"])] |> Matrix
@@ -44,15 +56,17 @@ q = par.X * b;
 τ = [quantconvert(q[j], median(θ), median(α), μ[j],
     median(σ)) for j in 1:length(par.y)] |> mean
 
-par.α = τ
+par.α = mcτ(0.1, median(α), median(θ), median(σ), 10000)
+par.nMCMC = 50000
+par.burnIn = 5000
 #βres, _ = mcmc(par, 1.3, 1.89, 4.06, b);
-βres, _ = mcmc(par, 1.5, median(θ), median(σ), b);
-plot(βres[:,3])
-acceptance(βres)
-plot(cumsum(βres[:,4]) ./ (1:size(βres,1)))
-
-[par.y[i] <= par.X[i,:] ⋅ b for i in 1:length(par.y)] |> mean
+βres, _ = mcmc(par, 0.25, median(θ), median(σ), zeros(size(X, 2)));
 [par.y[i] <= par.X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+
+acceptance(βres)
+
+#[par.y[i] <= par.X[i,:] ⋅ b for i in 1:length(par.y)] |> mean
 
 α = 0.9
 N = 2*5000

@@ -18,7 +18,7 @@ using Formatting
 end
 
 ## Simulation study with AEPD error term
-n = 2000;
+n = 250;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
@@ -33,14 +33,14 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
     convertTau = 0, old = 0,  sdOld = 0, bayes = 0, sdBayes = 0)
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 50
+reps = 10
 
 @sync @distributed for i ∈ 1:size(settings, 1)
     p, skew, τ = settings[i, 1:3]
     old, bayes, convertTau = [zeros(reps) for i in 1:3]
     for j ∈ 1:reps
         y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, p, skew), n);
-        par = Sampler(y, X, skew, 6000, 5, 1000);
+        par = Sampler(y, X, skew, 10000, 5, 2500);
         β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
         μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 
@@ -66,18 +66,20 @@ reps = 50
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-#CSV.write("sims.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250.csv", plt_dat)
 
 # simulation with other random errors
 quant = [0.1, 0.5, 0.9]
+quant = [0.9]
 #dists = ["Gumbel", "Erlang", "Tdist", "Chi"]
 dists = [1,2,3,4]
+dists = [4]
 settings = DataFrame(tau = repeat(quant, length(dists)), dist = repeat(dists, inner = length(quant)),
     p = 0, bayes = 0, sdBayes = 0, old = 0, sdOld = 0)
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 50
+reps = 20
 
 @sync @distributed for i ∈ 1:size(settings, 1)
     old, bayes, p = [zeros(reps) for i in 1:3]
@@ -93,10 +95,10 @@ reps = 50
             ε = [0.6, 0.25]
         else #"Chi"
             y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
-            ε = [0.6, 0.5]
+            ε = [0.8, 1.]
         end
 
-        par = Sampler(y, X, 0.5, 8000, 5, 2000);
+        par = Sampler(y, X, 0.5, 10000, 5, 2500);
         β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
         μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 
@@ -123,7 +125,7 @@ reps = 50
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250_1.csv", plt_dat)
 
 ## Bootstrap τ on davids data?
 reps = 20

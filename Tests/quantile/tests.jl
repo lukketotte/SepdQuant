@@ -56,14 +56,14 @@ q = par.X * b;
 τ = [quantconvert(q[j], median(θ), median(α), μ[j],
     median(σ)) for j in 1:length(par.y)] |> mean
 
-par.α = mcτ(0.1, median(α), median(θ), median(σ), 10000)
-par.nMCMC = 50000
-par.burnIn = 5000
+par.α = mcτ(0.3, median(α), median(θ), median(σ), 5000)
+par.nMCMC = 10000
+par.burnIn = 2000
 #βres, _ = mcmc(par, 1.3, 1.89, 4.06, b);
-βres, _ = mcmc(par, 0.25, median(θ), median(σ), zeros(size(X, 2)));
+βres, _ = mcmc(par, 1., median(θ), median(σ), zeros(size(X, 2)));
 [par.y[i] <= par.X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
 
-
+plot(βres[:,2])
 acceptance(βres)
 
 #[par.y[i] <= par.X[i,:] ⋅ b for i in 1:length(par.y)] |> mean

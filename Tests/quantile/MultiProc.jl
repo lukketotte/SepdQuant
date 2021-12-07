@@ -66,7 +66,7 @@ reps = 10
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250.csv", plt_dat)
+#CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250.csv", plt_dat)
 
 # simulation with other random errors
 quant = [0.1, 0.5, 0.9]
@@ -125,7 +125,7 @@ reps = 20
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250_1.csv", plt_dat)
+#CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250_1.csv", plt_dat)
 
 ## Bootstrap τ on davids data?
 reps = 20

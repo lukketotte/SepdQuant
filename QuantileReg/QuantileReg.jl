@@ -241,8 +241,8 @@ end
 function mcmcThin(σ::AbstractVector{<:Real}, β::Array{<:Real, 2}, s::Sampler)
     thin = ((s.burnIn:s.nMCMC) .% s.thin) .=== 0
     β = (β[s.burnIn:s.nMCMC,:])[thin,:]
-    σ = (σ[s.burnIn:s.nMCMC])[thin]
-    return β, σ
+    #σ = (σ[s.burnIn:s.nMCMC])[thin]
+    return β
 end
 
 acceptance(θ::AbstractMatrix{<:Real}) = size(θ, 1) |> n -> 1-((θ[2:n, 1] .=== θ[1:(n - 1), 1]) |> mean)

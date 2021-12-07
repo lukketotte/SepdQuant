@@ -1,77 +1,66 @@
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, Turing, QuantileRegressions
-include("../aepd.jl")
-include("../../QuantileReg/QuantileReg.jl")
-using .AEPD, .QuantileReg
+using Distributed, SharedArrays
+@everywhere using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, QuantileRegressions, DataFrames, QuadGK
+@everywhere include(joinpath(@__DIR__, "../aepd.jl"))
+@everywhere include(joinpath(@__DIR__, "../../QuantileReg/QuantileReg.jl"))
+@everywhere using .AEPD, .QuantileReg
 
-using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles
+using Plots, PlotThemes, CSV, StatFiles, CSVFiles
 theme(:juno)
-# using Formatting
 
-## All covariates
+@everywhere f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
+
+@everywhere function quantconvert(q, p, α, μ, σ)
+    a₁ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, Inf)[1]
+    a₂ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, q)[1]
+    1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
+end
+
+@everywhere function mcτ(τ, α, p, σ, n = 1000, N = 1000)
+    res = zeros(N)
+    for i in 1:N
+        dat = rand(Aepd(0, σ, p, α), n)
+        q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, τ) |> coef;
+        res[i] = quantconvert(q[1], p, α, 0, σ)
+    end
+    mean(res)
+end
+
 dat = load(string(pwd(), "/Tests/data/hks_jvdr.csv")) |> DataFrame;
-y = dat[:, :osvAll]
-X = dat[:, Not(["osvAll"])] |> Matrix
+y, X = dat[:, :osvAll], dat[:, Not(["osvAll"])] |> Matrix;
 X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
 
-# par = Sampler(y, X, 0.5, 150000, 20, 10000);
+α = range(0.1, 0.9, length = 9)
+p, s, a = 1.9659771517710287, 3.925316251127944, 0.37734587781936146
+B = [-1.733882520540273, -0.02497382239874957, -2.2174786785070655,
+    2.222952091888118, 4.279598568635178e-5, 0.42894516548263745,
+    1.2657078863640019, -0.0015088400285910744, 0.1733927024309777]
 
-# α = 0.1: thin = 30, ϵ = .9, ϵθ = 1.
-# α = 0.2: thin = 30, ϵ = 1.2
-# α = 0.3: thin = 30, ϵ = 1.3
-# α = 0.4: thin = 30, ϵ = 1.5
-# α = 0.5: thin = 30, ϵ = 1.5
-# α = 0.6: thin = 30, ϵ = 1.6
-# α = 0.7: thin = 30, ϵ = 1.6
-# α = 0.8: thin = 30, ϵ = 1.4
-# α = 0.9: thin = 10, ϵ = .6
+settings = SharedArray(hcat(α, zeros(9), zeros(9)))
 
-α = 0.05
-par = Sampler(y, X, α, 21000, 5, 1000);
+#par = Sampler(y, X, a, 20000, 1, 10000);
+#β, θ, σ, α = mcmc(par, 0.8, .2, 1., 1, 2, 0.5, zeros(size(X,2)));
 
-βinit = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-    qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α) |> coef
-#par = Sampler(y, X, 0.7, 200000, 5, 100000);
-β, θ, σ = mcmc(par, 0.4, 0.4, 1., 1., βinit);
-#β, θ, σ = mcmc(par, 1000., .8, 0.4, 0.9, 1.1, βinit);
-#βa, σa = mcmc(par, 1000., 0.5, βinit, 1);
+p,s,a,B = median(θ), median(σ), median(α), median(β, dims=1);
+μ = par.X * B' |> x -> reshape(x, size(x, 1));
+par.nMCMC = 60000
+par.burnIn = 20000
 
-1-((β[2:size(β, 1), 1] .=== β[1:(size(β, 1) - 1), 1]) |> mean)
-
-
-mean(β, dims = 1)
-βinit
-p = 1
-plot(β[:, 7])
-plot(θ)
-plot(cumsum(β[:,2])./(1:length(θ)))
-
-
-Q = zeros(length(y))
-for i ∈ 1:length(y)
-    Q[i] = y[i] <= ceil(exp(X[i,:] ⋅ b) + par.α)
+@sync @distributed for i ∈ 1:length(α)
+    println(α[i])
+    b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
+        qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, α[i]) |> coef
+    q = par.X * b
+    #par.α = mcτ(α[i], a, p, s, 5000)
+    par.α = [quantconvert(q[j], p, a, μ[j], s) for j in 1:length(par.y)] |> mean
+    ϵ = α[i] == 0.1  ? 0.7 : 0.85
+    β = mcmc(par, ϵ, p, s, zeros(size(par.X, 2)), verbose = false)
+    settings[i, 2] = [par.y[i] <= q[i] for i in 1:length(par.y)] |> mean
+    settings[i, 3] = (median(β, dims = 1) |> x -> [par.y[i] <= par.X[i,:] ⋅ x  for i in 1:length(par.y)]) |> mean
 end
-mean(Q)
-mean(y <= ceil.(exp.(X * b) .+ 0.5))
-##
-chain = Chains(β, ["intercept";names(dat[:, Not(["osvAll"])])]);
-mean(summarystats(chain)[:, :ess]) / length(θ)
 
-##
-p = 3
-plot(β[:, 1])
-1-((β[2:length(θ), 1] .=== β[1:(length(θ) - 1), 1]) |> mean)
-plot(θ)
-## Estimate over multiple quantiles
-colnames = names(dat)
-colnames[1] = "intercept"
-feMCMC = FormatExpr("mcmc_{}.csv")
-α = range(0.1, 0.9, length = 17)
-βinit = [-1.85, -0.046, -2.477, 2.628, 0.0, 0.412, 1.522, -0.003, 0.206]
-par = MCMCparams(y, X, 200000, 5, 100000);
-for a in α
-    println(a)
-    β, θ, σ = mcmc(par, 0.9, 100., .8, .25, βinit, 3, 1.5, true)
-    CSV.write(format(feMCMC, 0.9), hcat(DataFrame(β, colnames), DataFrame([σ, θ], ["σ", "θ"])))
-end
+settings
+
+plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["quantile", "quantreg", "sepdreg"])
+#CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/quantcompconflict.csv", plt_dat)

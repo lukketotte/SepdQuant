@@ -1,7 +1,8 @@
 using Distributions, QuantileRegressions, LinearAlgebra, Random, SpecialFunctions, QuadGK
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
-using .AEPD, .QuantileReg
+include("../../QuantileReg/FreqQuantileReg.jl")
+using .AEPD, .QuantileReg, .FreqQuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, KernelDensity
 theme(:juno)
@@ -32,6 +33,14 @@ X = dat[:, Not(["osvAll"])] |> Matrix
 X = X[y.>0,:];
 y = y[y.>0];
 X = hcat([1 for i in 1:length(y)], X);
+
+## Testing johans code
+control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
+  :is_se => false, :est_beta => true, :est_sigma => true,
+  :est_p => true, :est_tau => true)
+
+quantfreq(y, X, control)
+
 
 ##
 par = Sampler(y, X, 0.5, 11000, 1, 1000);

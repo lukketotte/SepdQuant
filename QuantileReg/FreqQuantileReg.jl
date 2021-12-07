@@ -1,28 +1,18 @@
+module FreqQuantileReg
+
+export quantfreq
+
 using RCall
 
-# usual installation does not work, using following PR
-# https://github.com/JuliaInterop/RCall.jl/pull/342/commits/4c498eac847781d15844d35b2f454451654c25c6
-function install_Rpackages(pkg, repos = "https://cran.rstudio.com")
-    run(`R -e "install.packages('$pkg', repos = '$repos')"`)
-end
-
-function install_Rpackages(pkgs::AbstractVector, repos = "https://cran.rstudio.com")
-    pkgs_vec = reduce((x,y)->"$x,$y", ["'$p'" for p in pkgs])
-    pkgs_str = "c($pkgs_vec)"
-    run(`R -e "install.packages($(pkgs_str), repos = '$repos')"`)
-end
-
-function freq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Symbol, <:Any}) where {T, M <: Real}
+function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Symbol, <:Any}) where {T, M <: Real}
   rcopy(R"""
   Control = $Control
   Y = $y
   X = $X
 
-  library(quantreg)
-  library(maxLik)
-  library(ggplot2)
-  library(tidyverse)
-  library(AEP)
+  suppressMessages(library(quantreg))
+  suppressMessages(library(maxLik))
+  suppressMessages(library(AEP))
 
   AEPD_est_fun <- function(y,x,beta_0,sigma_0,p_0,tau_0,control){
 
@@ -235,11 +225,6 @@ function freq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Symbol, 
     return(res)
   }
 
-
-
-  #HKS <- read.csv("./Tests/data/hks_jvdr.csv")
-
-  #HKS_no0 <- HKS[HKS$osvAll!=0,]
   N <- length(Y)
   Y <- Y + runif(N)
   Y <- as.matrix(log(Y))
@@ -254,16 +239,4 @@ function freq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Symbol, 
   """)
 end
 
-control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
-  :is_se => false, :est_beta => true, :est_sigma => true,
-  :est_p => true, :est_tau => true)
-
-freq(y, X, control)
-
-function testing(a, X)
-  R"""
-  list(y = $a, a = $X)
-  """
 end
-
-testing(y, X)

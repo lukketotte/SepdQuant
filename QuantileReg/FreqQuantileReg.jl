@@ -4,11 +4,15 @@ export quantfreq
 
 using RCall
 
-function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Symbol, <:Any}) where {T, M <: Real}
+function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M},
+    Control::Dict{Symbol, <:Any}, sigma::Real = 2, p::Real = 2, tau::Real = 0.5) where {T, M <: Real}
   rcopy(R"""
   Control = $Control
   Y = $y
   X = $X
+  Sigma_0 = $sigma
+  P_0 = $p
+  Tau_0 = $tau
 
   suppressMessages(library(quantreg))
   suppressMessages(library(maxLik))
@@ -163,9 +167,9 @@ function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Sym
 
       funval_vec[iter] <- loss_new
 
-      cat('Iteration number ',iter , ' is finished. The max change is ',max_abs_change,'. The loss is ',loss_new,  '\n', sep='')
-
-
+      if(Control$verbose){
+        cat('Iteration number ',iter , ' is finished. The max change is ',max_abs_change,'. The loss is ',loss_new,  '\n', sep='')
+      }
     }
 
     #Calculate gradient and Hessian for standard errors
@@ -226,14 +230,16 @@ function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Sym
   }
 
   N <- length(Y)
-  Y <- Y + runif(N)
-  Y <- as.matrix(log(Y))
-
+  #Y <- Y + runif(N)
+  #Y <- as.matrix(log(Y))
+  if(Control$log){
+      Y <- Y + runif(N)
+      Y <- as.matrix(log(Y))
+    } else {
+      Y <- as.matrix(Y)
+  }
   NBeta <- dim(X)[2]
   Beta_0 <- rep(0,NBeta)
-  Sigma_0 <- 2
-  P_0 <- 2
-  Tau_0 <- 0.5
 
   AEPD_obj <- AEPD_est_fun(Y,X,Beta_0,Sigma_0,P_0,Tau_0,Control)
   """)

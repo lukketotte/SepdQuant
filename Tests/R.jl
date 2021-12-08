@@ -241,9 +241,9 @@ function freq(y::AbstractVector{T}, X::AbstractMatrix{M}, Control::Dict{Symbol, 
 
   #HKS_no0 <- HKS[HKS$osvAll!=0,]
   N <- length(Y)
-  Y <- Y + runif(N)
-  Y <- as.matrix(log(Y))
-
+  #Y <- Y + runif(N)
+  #Y <- as.matrix(log(Y))
+  Y <- as.matrix(Y)
   NBeta <- dim(X)[2]
   Beta_0 <- rep(0,NBeta)
   Sigma_0 <- 2

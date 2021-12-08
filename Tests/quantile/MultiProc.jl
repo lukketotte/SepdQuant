@@ -40,12 +40,12 @@ reps = 10
     old, bayes, convertTau = [zeros(reps) for i in 1:3]
     for j ∈ 1:reps
         y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, p, skew), n);
+        # Bayesian
         par = Sampler(y, X, skew, 10000, 5, 2500);
         β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
         μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 
-        b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
-            qreg(@formula(x1 ~  x3), x, τ) |> coef;
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, τ) |> coef;
         q = X * b;
         convertTau[j] = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
 

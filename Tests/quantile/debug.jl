@@ -1,40 +1,10 @@
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ForwardDiff
-using KernelDensity
 include("../../QuantileReg/QuantileReg.jl")
 include("../aepd.jl")
-using .QuantileReg, .AEPD,
+include("../../QuantileReg/FreqQuantileReg.jl")
+using .AEPD, .QuantileReg, .FreqQuantileReg
 
-p, a, s = 1.89, 0.444, 4.06
-p, a, s = mean(θ), mean(α), mean(σ)
-
-
-mcτ(0.1, median(α), median(θ), median(σ))
-
-n = 1000
-N = 1000
-res = zeros(N)
-for i in 1:N
-    dat = rand(Aepd(0, s, p, a), n)
-    q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, 0.9) |> coef;
-    res[i] = quantconvert(q[1], p, a, 0, s)
-end
-τ = mean(res)
-
-par.y .- mean(par.y) |> mean
-mean(dat)
-
-dat = rand(Chisq(3), 10000)
-k = kde(dat)
-x = range(minimum(dat), maximum(dat), length = 1000)
-k2 = kde(par.y .- mean(par.y))
-
-plot(x, pdf(k, x))
-plot!(x, pdf(k2, x))
-
-
-
-##
-n = 200;
+n = 2000;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
@@ -98,12 +68,40 @@ end
 τ = mean(res)
 
 ## double check (this might be the real way to make a point actually)
-n = 1000;
+n = 2000;
 x = rand(Normal(), n);
 # 2.5, 1.5
-y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 2., 0.7), n);
+y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 3., 2., 0.7), n);
 X = hcat(ones(n), x)
 
+# Freq estimation
+control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
+  :is_se => false, :est_beta => true, :est_sigma => true,
+  :est_p => true, :est_tau => true, :log => false, :verbose => false)
+
+res = quantfreq(y, X, control)
+
+
+control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
+
+
+b = DataFrame(hcat(y, X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, 0.2) |> coef;
+q = X * b;
+μ = X*res[:beta]
+τ = [quantconvert(q[j], res[:p], res[:tau], μ[j],
+    res[:sigma]) for j in 1:length(y)] |> mean
+
+res = quantfreq(y, X, control, res[:sigma], res[:p], τ)
+
+mean(y .<= X*res[:beta])
+
+
+res[:p]
+res[:sigma]
+res[:tau]
+res[:beta]
+
+# Simulation stuff
 reps = 10
 α = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
 res3 = zeros(length(α))

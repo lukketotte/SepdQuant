@@ -14,9 +14,9 @@ function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M},
   P_0 = $p
   Tau_0 = $tau
 
-  suppressMessages(library(quantreg))
-  suppressMessages(library(maxLik))
-  suppressMessages(library(AEP))
+  suppressWarnings(suppressMessages(library(quantreg)))
+  suppressWarnings(suppressMessages(library(maxLik)))
+  suppressWarnings(suppressMessages(library(AEP)))
 
   AEPD_est_fun <- function(y,x,beta_0,sigma_0,p_0,tau_0,control){
 

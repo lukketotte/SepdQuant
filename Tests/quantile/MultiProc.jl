@@ -69,11 +69,11 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
         # Compute τ converted
         b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, τ) |> coef
         q = X * b
-        if n <= 250
+        if n >= 250
             taubayes = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
             taufreq  = [quantconvert(q[k], res[:p], res[:tau], μf[k], res[:sigma]) for k in 1:length(y)] |> mean
         else
-            taubayes = mcτ(α[i], a, p, s, 2500)
+            taubayes = mcτ(α[i], meidna(α), median(θ), median(σ), 2500)
             taufreq  = mcτ(α[i], res[:tau], res[:p], res[:sigma], 2500)
         end
 

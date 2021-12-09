@@ -8,6 +8,56 @@ theme(:juno)
 
 using RDatasets
 
+##
+RDatasets.datasets("mlmRev") |> println
+RDatasets.datasets("MASS") |> println
+
+dat = dataset("MASS", "GAGurine")
+y = log.(dat[!, :GAG])
+X = hcat(ones(length(y)), dat[!,:Age], dat[!,:Age].^2)
+
+par = Sampler(y, X, 0.5, 10000, 1, 2000);
+β, θ, σ, α = mcmc(par, 1., 0.15, 1., 2, 1, 0.5, zeros(size(X, 2)));
+plot(α)
+plot(θ)
+plot(β[:,3])
+acceptance(α)
+
+mean(θ)
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, 0.1) |> coef;
+q = X * b;
+μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+par.α = [quantconvert(q[j], mean(θ), mean(α), μ[j], mean(σ)) for j in 1:length(par.y)] |> mean
+par.α = mcτ(0.1, mean(α), mean(θ), mean(σ), 5000)
+par.α = 0.1
+βres = mcmc(par, 0.3, median(θ), median(σ), zeros(size(par.X, 2)))
+mean(par.y .<= par.X *  median(βres, dims = 1)')
+acceptance(βres)
+mean(y .<= q)
+
+
+## works ok
+dat = dataset("MASS", "nlschools")
+dat
+y = log.(dat[!, :Lang])
+X = hcat(ones(length(y)), Matrix(dat[!, [2,4,5]]))
+
+par = Sampler(y, X, 0.5, 10000, 1, 2000);
+β, θ, σ, α = mcmc(par, 1., 0.15, 1., 2, 1, 0.5, zeros(size(X, 2)));
+plot(α)
+acceptance(α)
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4 + x5), x, 0.7) |> coef;
+q = X * b;
+μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+par.α = [quantconvert(q[j], median(θ), median(α), μ[j], median(σ)) for j in 1:length(par.y)] |> mean
+mcτ(0.7, median(α), median(θ), median(σ), 5000)
+βres = mcmc(par, 0.6, median(θ), median(σ), zeros(size(par.X, 2)))
+mean(par.y .<= par.X *  median(βres, dims = 1)')
+acceptance(βres)
+mean(y .<= q)
+
 ## QuantileReg data
 dat = load(string(pwd(), "/Tests/data/Immunog.csv")) |> DataFrame;
 names(dat)

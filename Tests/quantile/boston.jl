@@ -8,6 +8,31 @@ theme(:juno)
 
 using RDatasets
 
+## Stocks seems to work ok
+dat = load(string(pwd(), "/Tests/data/NFLX.csv")) |> DataFrame
+y = log.(dat[2:size(dat, 1),:Close])
+X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Close]))
+
+par = Sampler(y, X, 0.5, 5000, 1, 1000);
+β, θ, σ, α = mcmc(par, 1., 0.17, 1., 2, 1, 0.5, zeros(size(par.X, 2)));
+plot(α)
+plot(θ)
+plot(β[:,2])
+acceptance(α)
+
+par.α = mcτ(0.9, mean(α), mean(θ), mean(σ), 5000)
+par.nMCMC, par.burnIn = 12000, 3000
+βres = mcmc(par, 0.5, mean(θ), mean(σ), rand(size(par.X, 2)))
+mean(par.y .<= par.X *  median(βres, dims = 1)')
+acceptance(βres)
+
+par.α = 0.9
+β1, θ1, _ = mcmc(par, .6, 1., 1., 2, rand(size(par.X, 2)));
+mean(par.y .<= par.X *  median(β1, dims = 1)')
+plot(θ1)
+acceptance(θ1)
+acceptance(β1)
+
 ##
 RDatasets.datasets("mlmRev") |> println
 RDatasets.datasets("MASS") |> println

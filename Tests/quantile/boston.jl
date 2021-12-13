@@ -12,20 +12,25 @@ using RDatasets
 dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame
 scatter(dat[1:(size(dat,1)-1), :Temperature], dat[2:size(dat,1), :Temperature])
 
-y = log.(dat[2:size(dat, 1),:Temperature])
-X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Temperature]))
+y = (dat[2:size(dat, 1),:Temperature])
+X = hcat(ones(length(y)), (dat[1:(size(dat,1)-1),:Temperature]))
+
+dat[1,:]
+dat[3649,:]
 
 ## Stocks seems to work ok
 dat = load(string(pwd(), "/Tests/data/AMZN.csv")) |> DataFrame
 y = log.(dat[2:size(dat, 1),:Close])
 X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Close]))
 
-par = Sampler(y, X, 0.5, 5000, 1, 1000);
-β, θ, σ, α = mcmc(par, .25, 0.25, 1., 2, 1, 0.5, rand(size(par.X, 2)));
+par = Sampler(y, X, 0.5, 10000, 1, 1000);
+β, θ, σ, α = mcmc(par, .3, 0.11, 1.1, 2, 1, 0.5, rand(size(par.X, 2)));
 plot(α)
 plot(θ)
 plot(β[:,2])
 acceptance(θ)
+acceptance(β)
+acceptance(α)
 
 par.α = mcτ(0.8, mean(α), mean(θ), mean(σ), 5000)
 par.nMCMC, par.burnIn = 6000, 1000

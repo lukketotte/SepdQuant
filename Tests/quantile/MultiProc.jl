@@ -5,7 +5,7 @@ using Distributed, SharedArrays
 @everywhere include(joinpath(@__DIR__, "../../QuantileReg/FreqQuantileReg.jl"))
 @everywhere using .AEPD, .QuantileReg, .FreqQuantileReg
 
-using Plots, PlotThemes, CSV, StatFiles, CSVFiles
+using Plots, PlotThemes, CSV, StatFiles, CSVFiles, HTTP
 theme(:juno)
 using Formatting
 
@@ -27,6 +27,52 @@ end
     end
     mean(res)
 end
+
+## Application, max temp in Melbourne?
+dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame
+y = log.(dat[2:size(dat, 1),:Temperature])
+X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Temperature]))
+
+settings = DataFrame(tau = range(0.1, 0.9, length = 9), old = 0, bayes = 0, freq = 0, qr = 0)
+
+par = Sampler(y, X, 0.5, 10000, 1, 1000);
+β, θ, σ, α = mcmc(par, .25, 0.15, 1., 2, 1, 0.5, rand(size(par.X, 2)));
+μ = X * [median(β[:, i]) for i in 1:size(X, 2)]
+res = quantfreq(y, X, control);
+μf = X * res[:beta]
+control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
+
+settings = SharedArray(Matrix(settings))
+
+#CSV.write("mcmc.csv", DataFrame(shape = θ, scale = σ, skewness = α, beta = β[:,2]))
+
+@sync @distributed for i ∈ 1:size(settings, 1)
+    b = DataFrame(hcat(y, X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, settings[i,1]) |> coef
+    q = X * b
+    settings[i, 5] = mean(y .<= q)
+
+    if 0.1 < settings[i,1] < 0.9
+        par.α = [quantconvert(q[j], mean(θ), mean(α), μ[j], mean(σ)) for j in 1:length(y)] |> mean
+        convTau = [quantconvert(q[j], res[:p], res[:tau], μf[j], res[:sigma]) for j in 1:length(y)] |> mean
+    else
+        par.α = mcτ(settings[i,1], mean(α), mean(θ), mean(σ), 5000)
+        convTau = mcτ(settings[i,1], res[:tau], res[:p], res[:sigma], 5000)
+    end
+
+    βres = mcmc(par, 0.5, mean(θ), mean(σ), rand(size(par.X, 2)))
+    settings[i, 3] = mean(par.y .<= par.X *  median(βres, dims = 1)')
+
+    temp = quantfreq(y, X, control, res[:sigma], res[:p], convTau)
+    settings[i,4] = mean(y .<= X*temp[:beta])
+
+    par.α = settings[i,1]
+    β1, _, _ = mcmc(par, .25, 1., 1., 2, rand(size(par.X, 2)))
+    settings[i, 2] = mean(par.y .<= par.X *  median(β1, dims = 1)')
+end
+settings
+plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "bayes", "freq", "qr"])
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
+
 ## Simulation study with AEPD error term
 n = 1000;
 x = rand(Normal(), n);

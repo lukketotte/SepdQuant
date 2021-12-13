@@ -3,35 +3,51 @@ include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
 
-using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, KernelDensity
+using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, HTTP
 theme(:juno)
 
 using RDatasets
 
+## Detta ska vi ha!
+dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame
+scatter(dat[1:(size(dat,1)-1), :Temperature], dat[2:size(dat,1), :Temperature])
+
+y = log.(dat[2:size(dat, 1),:Temperature])
+X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Temperature]))
+
 ## Stocks seems to work ok
-dat = load(string(pwd(), "/Tests/data/NFLX.csv")) |> DataFrame
+dat = load(string(pwd(), "/Tests/data/AMZN.csv")) |> DataFrame
 y = log.(dat[2:size(dat, 1),:Close])
 X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Close]))
 
 par = Sampler(y, X, 0.5, 5000, 1, 1000);
-β, θ, σ, α = mcmc(par, 1., 0.17, 1., 2, 1, 0.5, zeros(size(par.X, 2)));
+β, θ, σ, α = mcmc(par, .25, 0.25, 1., 2, 1, 0.5, rand(size(par.X, 2)));
 plot(α)
 plot(θ)
 plot(β[:,2])
-acceptance(α)
+acceptance(θ)
 
-par.α = mcτ(0.9, mean(α), mean(θ), mean(σ), 5000)
-par.nMCMC, par.burnIn = 12000, 3000
+par.α = mcτ(0.8, mean(α), mean(θ), mean(σ), 5000)
+par.nMCMC, par.burnIn = 6000, 1000
 βres = mcmc(par, 0.5, mean(θ), mean(σ), rand(size(par.X, 2)))
 mean(par.y .<= par.X *  median(βres, dims = 1)')
 acceptance(βres)
+median(βres, dims = 1)
+plot(βres[:,2])
 
-par.α = 0.9
-β1, θ1, _ = mcmc(par, .6, 1., 1., 2, rand(size(par.X, 2)));
+par.α = 0.1
+β1, θ1, _ = mcmc(par, .25, 1., 1., 2, rand(size(par.X, 2)));
 mean(par.y .<= par.X *  median(β1, dims = 1)')
 plot(θ1)
 acceptance(θ1)
 acceptance(β1)
+
+b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, 0.7) |> coef;
+q = X * b;
+μ = X * mean(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+par.α = [quantconvert(q[j], mean(θ), mean(α), μ[j], mean(σ)) for j in 1:length(par.y)] |> mean
+
+
 
 ##
 RDatasets.datasets("mlmRev") |> println
@@ -157,7 +173,6 @@ plot(βres[:,1])
 [par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
 
 ## Fishery data
-using HTTP
 dat = HTTP.get("https://people.brandeis.edu/~kgraddy/datasets/fish.out") |> x -> CSV.File(x.body) |> DataFrame
 names(dat)
 

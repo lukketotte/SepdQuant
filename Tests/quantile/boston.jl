@@ -12,11 +12,11 @@ using RDatasets
 dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame
 scatter(dat[1:(size(dat,1)-1), :Temperature], dat[2:size(dat,1), :Temperature])
 
-y = (dat[2:size(dat, 1),:Temperature])
-X = hcat(ones(length(y)), (dat[1:(size(dat,1)-1),:Temperature]))
+y = log.(dat[2:size(dat, 1),:Temperature])
+X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Temperature]))
 
-dat[1,:]
-dat[3649,:]
+par = Sampler(y, X, 0.5, 10000, 1, 1000);
+β, θ, σ, α = mcmc(par, .3, 0.11, 1.1, 2, 1, 0.5, rand(size(par.X, 2)));
 
 ## Stocks seems to work ok
 dat = load(string(pwd(), "/Tests/data/AMZN.csv")) |> DataFrame
@@ -32,15 +32,42 @@ acceptance(θ)
 acceptance(β)
 acceptance(α)
 
-par.α = mcτ(0.8, mean(α), mean(θ), mean(σ), 5000)
-par.nMCMC, par.burnIn = 6000, 1000
+par.α = mcτ(0.9, mean(α), mean(θ), mean(σ), 5000)
+#par.nMCMC, par.burnIn = 6000, 1000
 βres = mcmc(par, 0.5, mean(θ), mean(σ), rand(size(par.X, 2)))
 mean(par.y .<= par.X *  median(βres, dims = 1)')
 acceptance(βres)
-median(βres, dims = 1)
+median(βres, dims = 1) |> println
+sqrt.(var(βres, dims = 1)) |> println
 plot(βres[:,2])
 
-par.α = 0.1
+control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
+  :is_se => true, :est_beta => true, :est_sigma => true,
+  :est_p => true, :est_tau => true, :log => false, :verbose => false)
+
+res = quantfreq(y, X, control)
+control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
+
+τ = mcτ(0.9, res[:tau], res[:p], res[:sigma], 5000)
+freq = quantfreq(y, X, control, res[:sigma], res[:p], τ)
+
+freq[:beta] |> println
+freq[:se] |> println
+
+#τ = 0.9
+N = 1000
+B = zeros(N, size(X, 2))
+for i ∈ 1:N
+    ids = sample(1:length(y), length(y))
+    #B[i,:] =  DataFrame(hcat(y[ids], X[ids,:]), :auto) |> x ->
+    #qreg(@formula(x1 ~ x3), x, τ) |> coef
+    freq = quantfreq(y, X, control, res[:sigma], res[:p], τ)
+    B[i,:] = freq[:beta]
+end
+mean(B, dims = 1) |> println
+sqrt.(var(B, dims = 1)) |> println
+
+par.α = 0.9
 β1, θ1, _ = mcmc(par, .25, 1., 1., 2, rand(size(par.X, 2)));
 mean(par.y .<= par.X *  median(β1, dims = 1)')
 plot(θ1)

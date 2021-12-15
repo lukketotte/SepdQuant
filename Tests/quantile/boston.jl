@@ -42,7 +42,7 @@ sqrt.(var(βres, dims = 1)) |> println
 plot(βres[:,2])
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
-  :is_se => true, :est_beta => true, :est_sigma => true,
+  :is_se => false, :est_beta => true, :est_sigma => true,
   :est_p => true, :est_tau => true, :log => false, :verbose => false)
 
 res = quantfreq(y, X, control)
@@ -54,15 +54,17 @@ freq = quantfreq(y, X, control, res[:sigma], res[:p], τ)
 freq[:beta] |> println
 freq[:se] |> println
 
-#τ = 0.9
-N = 1000
+
+τ = 0.9
+N = 2000
 B = zeros(N, size(X, 2))
 for i ∈ 1:N
+    println(i)
     ids = sample(1:length(y), length(y))
-    #B[i,:] =  DataFrame(hcat(y[ids], X[ids,:]), :auto) |> x ->
-    #qreg(@formula(x1 ~ x3), x, τ) |> coef
-    freq = quantfreq(y, X, control, res[:sigma], res[:p], τ)
-    B[i,:] = freq[:beta]
+    B[i,:] =  DataFrame(hcat(y[ids], X[ids,:]), :auto) |> x ->
+    qreg(@formula(x1 ~ x3), x, τ) |> coef
+    #freq = quantfreq(y[ids], X[ids,:], control, res[:sigma], res[:p], τ)
+    #B[i,:] = freq[:beta]
 end
 mean(B, dims = 1) |> println
 sqrt.(var(B, dims = 1)) |> println

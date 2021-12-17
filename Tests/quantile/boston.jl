@@ -42,11 +42,10 @@ sqrt.(var(βres, dims = 1)) |> println
 plot(βres[:,2])
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
-  :is_se => false, :est_beta => true, :est_sigma => true,
+  :is_se => true, :est_beta => true, :est_sigma => true,
   :est_p => true, :est_tau => true, :log => false, :verbose => false)
 
 res = quantfreq(y, X, control)
-control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
 
 τ = mcτ(0.9, res[:tau], res[:p], res[:sigma], 5000)
 freq = quantfreq(y, X, control, res[:sigma], res[:p], τ)

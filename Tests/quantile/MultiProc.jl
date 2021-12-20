@@ -119,7 +119,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
             taubayes = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
             taufreq  = [quantconvert(q[k], res[:p], res[:tau], μf[k], res[:sigma]) for k in 1:length(y)] |> mean
         else
-            taubayes = mcτ(α[i], meidna(α), median(θ), median(σ), 2500)
+            taubayes = mcτ(α[i], median(α), median(θ), median(σ), 2500)
             taufreq  = mcτ(α[i], res[:tau], res[:p], res[:sigma], 2500)
         end
 
@@ -153,19 +153,20 @@ CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simul
 
 # simulation with other random errors
 quant = [0.1, 0.5, 0.9]
-quant = [0.9]
+
 #dists = ["Gumbel", "Erlang", "Tdist", "Chi"]
 dists = [1,2,3,4]
-dists = [4]
+
 settings = DataFrame(tau = repeat(quant, length(dists)), dist = repeat(dists, inner = length(quant)),
-    p = 0, bayes = 0, sdBayes = 0, old = 0, sdOld = 0)
+    bayes = 0, sdBayes = 0, freq = 0, sdFreq = 0, old = 0, sdOld = 0)
+
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 20
+reps = 100
 
 @sync @distributed for i ∈ 1:size(settings, 1)
-    old, bayes, p = [zeros(reps) for i in 1:3]
+    old, bayes, freq = [zeros(reps) for i in 1:3]
     for j ∈ 1:reps
         if settings[i, 2] == 1 #"Gumbel"
             y = 2.1 .+ 0.5 .* x + rand(Gumbel(0, 1), n)
@@ -180,35 +181,54 @@ reps = 20
             y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
             ε = [0.8, 1.]
         end
+        # bayesian
+        par = Sampler(y, X, 0.5, 10000, 5, 2500)
+        β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5])
+        μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1))
 
-        par = Sampler(y, X, 0.5, 10000, 5, 2500);
-        β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
-        μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
+        # Freq
+        control[:est_sigma], control[:est_tau], control[:est_p] = (true, true, true)
+        res = quantfreq(y, X, control)
+        μf = X * res[:beta]
 
         b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
             qreg(@formula(x1 ~  x3), x, settings[i, 1]) |> coef;
         q = X * b;
-        τ = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
+        #τ = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
 
-        par.α = τ
-        βres, _ = mcmc(par, 1.3, median(θ), median(σ), b);
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, settings[i, 1]) |> coef
+        q = X * b
+        if n >= 250
+            taubayes = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(y)] |> mean
+            taufreq  = [quantconvert(q[k], res[:p], res[:tau], μf[k], res[:sigma]) for k in 1:length(y)] |> mean
+        else
+            taubayes = mcτ(α[i], median(α), median(θ), median(σ), 2500)
+            taufreq  = mcτ(α[i], res[:tau], res[:p], res[:sigma], 2500)
+        end
+
+        par.α = taubayes
+        βres= mcmc(par, 1.3, median(θ), median(σ), b);
 
         par.α = settings[i, 1]
-        βt, θ, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b);
+        βt, _, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b);
 
+        control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
+        res = quantfreq(y, X, control, res[:sigma], res[:p], taufreq)
+
+        freq[j] = mean(y .<= X*res[:beta])
         bayes[j] = [par.y[k] <= X[k,:] ⋅ median(βres, dims = 1)  for k in 1:length(par.y)] |> mean
         old[j] = [par.y[k] <= X[k,:] ⋅ median(βt, dims = 1)  for k in 1:length(par.y)] |> mean
-        p[j] = median(θ)
         end
-    settings[i, 3] = mean(p)
-    settings[i, 6] = mean(old)
-    settings[i, 7] = √var(old)
-    settings[i, 4] = mean(bayes)
-    settings[i, 5] = √var(bayes)
+    settings[i, 3] = mean(bayes)
+    settings[i, 4] = √var(bayes)
+    settings[i, 5] = mean(freq)
+    settings[i, 6] = √var(freq)
+    settings[i, 7] = mean(old)
+    settings[i, 8] = √var(old)
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-#CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250_1.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother1000.csv", plt_dat)
 
 ## Bootstrap τ on davids data?
 reps = 20

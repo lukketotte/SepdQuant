@@ -74,7 +74,7 @@ plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "b
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
 
 ## Simulation study with AEPD error term
-n = 1000;
+n = 250;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
@@ -163,7 +163,7 @@ settings = DataFrame(tau = repeat(quant, length(dists)), dist = repeat(dists, in
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 100
+reps = 20
 
 @sync @distributed for i ∈ 1:size(settings, 1)
     old, bayes, freq = [zeros(reps) for i in 1:3]
@@ -210,7 +210,7 @@ reps = 100
         βres= mcmc(par, 1.3, median(θ), median(σ), b);
 
         par.α = settings[i, 1]
-        βt, _, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b);
+        βt, _, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b)
 
         control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
         res = quantfreq(y, X, control, res[:sigma], res[:p], taufreq)
@@ -228,7 +228,7 @@ reps = 100
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother1000.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250.csv", plt_dat)
 
 ## Bootstrap τ on davids data?
 reps = 20

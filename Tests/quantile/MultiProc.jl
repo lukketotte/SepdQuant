@@ -74,13 +74,14 @@ plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "b
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
 
 ## Simulation study with AEPD error term
-n = 250;
+n = 1000;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
 p = [1.5, 2., 2.5]
-skew = [0.2, 0.8, 0.5]
-quant = range(0.1, 0.9, length = 3)
+skew = [0.1, 0.9, 0.5]
+quant = [0.1, 0.5, 0.9]
+# quant = range(0.1, 0.9, length = 3)
 
 settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner = length(quant)),
     skew = repeat(skew, length(p)) |> x -> repeat(x, inner = length(quant)),
@@ -130,7 +131,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
         bayes[j] = [par.y[k] <= μ[k]  for k in 1:length(par.y)] |> mean
 
         par.α = τ
-        βt, _, _ = mcmc(par, .6, 1., 1.2, 4, b, verbose = false)
+        βt, _, _ = mcmc(par, .6, .6, 1.2, 2, b, verbose = false)
         μ = X * median(βt, dims = 1)' |> x -> reshape(x, size(x, 1))
         old[j] = [par.y[k] <= μ[k]  for k in 1:length(par.y)] |> mean
 
@@ -148,7 +149,8 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims1000.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims1000_upd.csv", plt_dat)
+
 
 
 # simulation with other random errors

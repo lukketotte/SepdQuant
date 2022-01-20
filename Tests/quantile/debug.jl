@@ -12,13 +12,15 @@ y = 2.1 .+ 0.5 .* x + rand(Erlang(7, 0.5), n);
 y = 2.1 .+ 0.5 .* x + rand(Gumbel(0, 1), n);
 y = 2.1 .+ 0.5 .* x + rand(InverseGaussian(1, 1), n); # skip
 y = 2.1 .+ 0.5 .* x + rand(TDist(5), n);
-y = 2.1 .+ 0.5 .* x + rand(Chi(3), n)
+y = 2.1 .+ 0.5 .* x + rand(Chi(3), n);
 
-par = Sampler(y, X, 0.5, 10000, 5, 2000);
+y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 1.5, 0.9), n);
+
+par = Sampler(y, X, 0.5, 5000, 5, 1000);
 β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
 
-par.α = 0.1
-β, θ, σ = mcmc(par, .8, 1., 1., 2, [2.1, 0.5]);
+par.α = 0.5
+β, θ, σ = mcmc(par, .6, .6, 1., 2, [2.1, 0.5]);
 
 
 acceptance(α)

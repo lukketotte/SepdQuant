@@ -4,6 +4,10 @@ export mcmc, Sampler, acceptance
 
 using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff
 
+"""
+    Sampler(y, X, α, nMCMC, thin, burnIn)
+Contains data and other settings for MCMC sampler.
+"""
 mutable struct Sampler{T <: Real, M <: Real, Response <: AbstractVector, ModelMat <: AbstractMatrix}
     y::Response
     X::ModelMat
@@ -11,19 +15,22 @@ mutable struct Sampler{T <: Real, M <: Real, Response <: AbstractVector, ModelMa
     nMCMC::Int
     thin::Int
     burnIn::Int
+    πθ::String
 end
 
-function Sampler(y::AbstractVector{T}, X::AbstractMatrix{M}, α::Real, nMCMC::Int, thin::Int, burnIn::Int) where {T,M <: Real}
+function Sampler(y::AbstractVector{T}, X::AbstractMatrix{M}, α::Real, nMCMC::Int, thin::Int, burnIn::Int, πθ::String) where {T,M <: Real}
     nMCMC > 0 || thin > 0 || burnIn > 0 || throw(DomainError("Integers can't be negative"))
     α > 0 || α < 1 || throw(DomainError("α ∉ (0,1)"))
     y = T <: Int ?  log.(y + rand(Uniform(), length(y))) : y
     length(y) === size(X)[1] || throw(DomainError("Size of y and X not matching"))
-    Sampler{T, M, typeof(y), typeof(X)}(y, X, α, nMCMC, thin, burnIn)
+    Sampler{T, M, typeof(y), typeof(X)}(y, X, α, nMCMC, thin, burnIn, πθ)
 end
 
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int) = Sampler(y, X, α, nMCMC, 1, 1)
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, nMCMC::Int) = Sampler(y, X, 0.5, nMCMC, 1, 1)
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}) = Sampler(y, X, 0.5, 5000, 1, 1)
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int, πθ::String) = Sampler(y, X, α, nMCMC, 1, 1, πθ)
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int) = Sampler(y, X, α, nMCMC, 1, 1, "jeffrey")
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int, thin::Int, burnIn::Int) = Sampler(y, X, α, nMCMC, thin, burnIn, "jeffrey")
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, nMCMC::Int) = Sampler(y, X, 0.5, nMCMC, 1, 1, "jeffrey")
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}) = Sampler(y, X, 0.5, 5000, 1, 1, "jeffrey")
 
 data(s::Sampler) = (s.y, s.X)
 param(s::Sampler) = (s.y, s.X, s.α)
@@ -38,12 +45,12 @@ end
 function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
     n = length(s.y)
     a = gamma(1+1/θ)^θ * kernel(s, β, θ)
-    return -log(θ) + loggamma(n/θ) - (n/θ) * log(a) + log(πθ(θ))
+    return -log(θ) + loggamma(n/θ) - (n/θ) * log(a) + (s.πθ === "jeffrey" ? log(πθ(θ)) : 0)
 end
 
 function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real; trunc = .5)
-    prop = rand(Truncated(Normal(θ, ε^2), trunc, 10))
-    a = logpdf(Truncated(Normal(prop, ε^2), trunc, 10), θ) - logpdf(Truncated(Normal(θ, ε^2), trunc, Inf), prop)
+    prop = rand(Truncated(Normal(θ, ε^2), trunc, Inf))
+    a = logpdf(Truncated(Normal(prop, ε^2), trunc, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), trunc, Inf), prop)
     return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
@@ -68,15 +75,9 @@ function logβCond(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real)
     return - gamma(1+1/θ)^θ/σ^θ * kernel(s, β, θ)
 end
 
-function logβCond(β::AbstractVector{<:Real},s::Sampler, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real})
-    return - gamma(1+1/θ)^θ/σ^θ * kernel(s, β, θ) -1/(2*τ) * β'*diagm(λ.^(-2))*β
-end
-
 
 ∂β(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real) = ForwardDiff.gradient(β -> logβCond(β, s, θ, σ), β)
-∂β(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real}) = ForwardDiff.gradient(β -> logβCond(β, s, θ, σ, τ, λ), β)
 ∂β2(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real) = ForwardDiff.jacobian(β -> -∂β(β, s, θ, σ), β)
-∂β2(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real, τ::Real, λ::AbstractVector{<:Real}) = ForwardDiff.jacobian(β -> -∂β(β, s, θ, σ, τ, λ), β)
 
 function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
     ∇ = ∂β(β, s, θ, σ)
@@ -161,37 +162,6 @@ function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<
         nothing
 end
 
-# AEPD horse-shoe prior
-"""function mcmc(s::Sampler, τ::Real, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real,
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
-    n, p = size(s.X)
-    σ₁ > 0 || θ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
-    β = zeros(s.nMCMC, p)
-    σ, θ = zeros(s.nMCMC), zeros(s.nMCMC)
-    β[1,:] = typeof(β₁) <: Nothing ? inv(s.X'*s.X)*s.X'*s.y : β₁
-    σ[1], θ[1] = σ₁, θ₁
-
-    p = verbose && Progress(s.nMCMC-1, dt=0.5,
-        barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
-        barlen=50, color=:green)
-
-    for i ∈ 2:s.nMCMC
-        verbose && next!(p; showvalues=[(:iter,i) (:θ, round(θ[i-1], digits = 3)) (:σ, round(σ[i-1], digits = 3))])
-        mcmcInner!(s, θ, σ, β, i, ε, εᵦ, τ)
-    end
-    return mcmcThin(θ, σ, β, s)
-end
-
-function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<:Real},
-    β::AbstractMatrix{<:Real}, i::Int, ε::Real, εᵦ::Real, τ::Real)
-        θ[i] = sampleθ(s, θ[i-1], β[i-1,:], ε, trunc = 0.01)
-        σ[i] = sampleσ(s, θ[i-1], β[i-1,:])
-        β[i,:] = sampleβ(β[i-1,:], εᵦ, s, θ[i], σ[i], τ)
-        nothing
-end"""
-
-
-# convert to quantile estimates
 function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real, σ₁::Real,
     β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
     n, p = size(s.X)
@@ -239,7 +209,6 @@ end
 function mcmcThin(σ::AbstractVector{<:Real}, β::Array{<:Real, 2}, s::Sampler)
     thin = ((s.burnIn:s.nMCMC) .% s.thin) .=== 0
     β = (β[s.burnIn:s.nMCMC,:])[thin,:]
-    #σ = (σ[s.burnIn:s.nMCMC])[thin]
     return β
 end
 

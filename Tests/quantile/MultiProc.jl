@@ -90,7 +90,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 100
+reps = 3
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
@@ -131,6 +131,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
         bayes[j] = [par.y[k] <= μ[k]  for k in 1:length(par.y)] |> mean
 
         par.α = τ
+        par.πθ = "uniform"
         βt, _, _ = mcmc(par, .6, .6, 1.2, 2, b, verbose = false)
         μ = X * median(βt, dims = 1)' |> x -> reshape(x, size(x, 1))
         old[j] = [par.y[k] <= μ[k]  for k in 1:length(par.y)] |> mean
@@ -212,6 +213,7 @@ reps = 20
         βres= mcmc(par, 1.3, median(θ), median(σ), b);
 
         par.α = settings[i, 1]
+        par.πθ = "uniform"
         βt, _, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b)
 
         control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)

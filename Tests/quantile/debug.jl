@@ -19,8 +19,11 @@ y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, 1.5, 0.9), n);
 par = Sampler(y, X, 0.5, 5000, 5, 1000);
 β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5]);
 
-par.α = 0.5
+par.α = 0.1
+par.πθ = "uniform"
+par.πθ = "jeffrey"
 β, θ, σ = mcmc(par, .6, .6, 1., 2, [2.1, 0.5]);
+
 
 
 acceptance(α)

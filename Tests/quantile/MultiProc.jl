@@ -90,7 +90,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 3
+reps = 100
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
@@ -151,7 +151,7 @@ end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims1000_upd.csv", plt_dat)
-
+println(plt_dat)
 
 
 # simulation with other random errors

@@ -74,7 +74,7 @@ plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "b
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
 
 ## Simulation study with AEPD error term
-n = 1000;
+n = 300;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
@@ -90,7 +90,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 100
+reps = 10
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
@@ -149,9 +149,9 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
     settings[i, 9] = √var(freq)
 end
 
-plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims1000_upd.csv", plt_dat)
-println(plt_dat)
+plt_dat2 = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_upd.csv", plt_dat)
+
 
 
 # simulation with other random errors

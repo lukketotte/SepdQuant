@@ -74,13 +74,13 @@ plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "b
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
 
 ## Simulation study with AEPD error term
-n = 300;
+n = 350;
 x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
 p = [1.5, 2., 2.5]
-skew = [0.1, 0.9, 0.5]
-quant = [0.1, 0.5, 0.9]
+skew = [0.1, 0.9]
+quant = [0.1, 0.9]
 # quant = range(0.1, 0.9, length = 3)
 
 settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner = length(quant)),
@@ -90,7 +90,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 10
+reps = 25
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
@@ -116,7 +116,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
         # Compute τ converted
         b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, τ) |> coef
         q = X * b
-        if n >= 250
+        if n >= 350
             taubayes = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
             taufreq  = [quantconvert(q[k], res[:p], res[:tau], μf[k], res[:sigma]) for k in 1:length(y)] |> mean
         else
@@ -149,7 +149,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
     settings[i, 9] = √var(freq)
 end
 
-plt_dat2 = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
+plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_upd.csv", plt_dat)
 
 

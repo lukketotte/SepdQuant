@@ -150,7 +150,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_upd.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_upd2.csv", plt_dat)
 
 
 

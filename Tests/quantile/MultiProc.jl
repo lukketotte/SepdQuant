@@ -80,7 +80,7 @@ X = hcat(ones(n), x)
 
 p = [1.5, 2., 2.5]
 skew = [0.1, 0.9]
-quant = [0.1, 0.9]
+quant = [0.1, 0.5, 0.9]
 # quant = range(0.1, 0.9, length = 3)
 
 settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner = length(quant)),
@@ -90,7 +90,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 25
+reps = 30
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,

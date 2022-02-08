@@ -79,7 +79,7 @@ x = rand(Normal(), n);
 X = hcat(ones(n), x)
 
 p = [1.5, 2., 2.5]
-skew = [0.1, 0.9]
+skew = [0.1, 0.5, 0.9]
 quant = [0.1, 0.5, 0.9]
 # quant = range(0.1, 0.9, length = 3)
 
@@ -90,7 +90,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 30
+reps = 10
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
@@ -150,7 +150,16 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_upd2.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_9.csv", plt_dat)
+
+plt_dat1[:, 4:9]
+
+test = (plt_dat1[:, :old] + plt_dat2[:, :old])/2
+
+(plt_dat1[2, :old]+plt_dat2[2,:old])/2 === test[2]
+
+
+
 
 
 

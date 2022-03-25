@@ -34,6 +34,7 @@ end
 ## RMSE & bias comparison
 N = 100
 res = SharedArray(zeros((N, 2)))
+resQuant = SharedArray(zeros((N, 2)))
 n = 200
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
@@ -53,10 +54,13 @@ X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
     res[i, 1] = mean((blp-ones(3)).^2)
     res[i, 2] = mean((bqr-ones(3)).^2)
+    resQuant[i, 1] = mean(par.y .<= par.X * blp)
+    resQuant[i, 2] = mean(par.y .<= par.X * bqr)
 end
 
 res
 
+mean(resQuant, dims = 1)
 mean(sqrt.(res), dims = 1)
 √var(res[:,1])
 √var(res[:,2])

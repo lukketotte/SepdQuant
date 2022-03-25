@@ -19,6 +19,7 @@ par = Sampler(y, X, 0.5, 10000, 5, 2000);
 β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]);
 par.α = mcτ(0.5, mean(α), mean(θ), mean(σ))
 
+
 bqr = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, 0.5) |> coef
 βlp = mcmc(par, .25, mean(θ), mean(σ), [0., 0., 0.])
 blp = mean(βlp, dims = 1)'

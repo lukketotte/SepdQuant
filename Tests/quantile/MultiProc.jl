@@ -23,10 +23,45 @@ end
     for i in 1:N
         dat = rand(Aepd(0, σ, p, α), n)
         q = DataFrame(hcat(dat), :auto) |> x -> qreg(@formula(x1 ~  1), x, τ) |> coef;
-        res[i] = quantconvert(q[1], p, α, 0, σ)
+        #res[i] = quantconvert(q[1], p, α, 0, σ)
+        a₁ = mean(abs.(dat .- q).^(p-1))
+        a₂ = mean(abs.(dat .- q).^(p-1) .* (dat .< q))
+        res[i] = 1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
     end
     mean(res)
 end
+
+## RMSE & bias comparison
+N = 100
+res = SharedArray(zeros((N, 2)))
+n = 200
+X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+
+@sync @distributed for i ∈ 1:N
+    println(i)
+    #n = 500;
+    #X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+    y = X*ones(3) + rand(Chisq(3), n)#rand(TDist(3), n)
+
+    par = Sampler(y, X, 0.5, 12000, 5, 4000)
+    β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]; verbose = false)
+    par.α = mcτ(0.9, mean(α), mean(θ), mean(σ))
+
+    βlp = mcmc(par, .1, mean(θ), mean(σ), [0., 0., 0.]; verbose = false)
+    blp = mean(βlp, dims = 1)'
+    bqr = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, 0.9) |> coef
+
+    res[i, 1] = mean((blp-ones(3)).^2)
+    res[i, 2] = mean((bqr-ones(3)).^2)
+end
+
+res
+
+mean(sqrt.(res), dims = 1)
+√var(res[:,1])
+√var(res[:,2])
+
+res2 = res
 
 ## Application, max temp in Melbourne?
 dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame

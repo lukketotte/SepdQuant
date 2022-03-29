@@ -31,39 +31,59 @@ end
     mean(res)
 end
 
+@everywhere function bivmix(n, p₁, μ₁, μ₂, σ₁, σ₂)
+    res = zeros(n)
+    for i ∈ 1:n
+        if rand(Uniform()) <= p₁
+            res[i] = rand(Normal(μ₁, σ₁))
+        else
+            res[i] = rand(Normal(μ₂, σ₂))
+        end
+    end
+    res
+end
+
 ## RMSE & bias comparison
 N = 100
-res = SharedArray(zeros((N, 2)))
+mseSepd = SharedArray(zeros((N, 3)))
+mseFreq = SharedArray(zeros((N, 3)))
+biasSepd = SharedArray(zeros((N, 3)))
+biasFreq = SharedArray(zeros((N, 3)))
 resQuant = SharedArray(zeros((N, 2)))
 n = 200
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
-
+# ϵᵦ = 0.9 for ϵ = rand(Normal(-1.281456, 1), n)
 @sync @distributed for i ∈ 1:N
     println(i)
-    #n = 500;
-    #X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
-    y = X*ones(3) + rand(Chisq(3), n)#rand(TDist(3), n)
+    # ϵ = rand(Normal(-1.281456, 1), n)
+    # ϵ = -6.192839 .+ rand(Chisq(3), n)
+    ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
+    y = X*ones(3) + ϵ
 
     par = Sampler(y, X, 0.5, 12000, 5, 4000)
     β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]; verbose = false)
     par.α = mcτ(0.9, mean(α), mean(θ), mean(σ))
 
-    βlp = mcmc(par, .1, mean(θ), mean(σ), [0., 0., 0.]; verbose = false)
+    βlp = mcmc(par, .25, mean(θ), mean(σ), [0., 0., 0.]; verbose = false)
     blp = mean(βlp, dims = 1)'
     bqr = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, 0.9) |> coef
 
-    res[i, 1] = mean((blp-ones(3)).^2)
-    res[i, 2] = mean((bqr-ones(3)).^2)
+    #res[i, 1] = mean((blp-ones(3)).^2)
+    mseSepd[i,:] = (blp-ones(3)).^2
+    biasSepd[i,:] = blp-ones(3)
+    #res[i, 2] = mean((bqr-ones(3)).^2)
+    mseFreq[i,:] = (bqr-ones(3)).^2
+    biasFreq[i,:] = bqr-ones(3)
     resQuant[i, 1] = mean(par.y .<= par.X * blp)
     resQuant[i, 2] = mean(par.y .<= par.X * bqr)
 end
 
-res
+sqrt.(mean(mseSepd, dims = 1)) |> println
+sqrt.(mean(mseFreq, dims = 1)) |> println
+mean(biasSepd, dims = 1) |> println
+mean(biasFreq, dims = 1) |> println
+mean(resQuant, dims = 1) |> println
 
-mean(resQuant, dims = 1)
-mean(sqrt.(res), dims = 1)
-√var(res[:,1])
-√var(res[:,2])
 
 res2 = res
 

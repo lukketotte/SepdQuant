@@ -44,7 +44,7 @@ end
 end
 
 ## RMSE & bias comparison
-N = 100
+N = 1000
 mseSepd = SharedArray(zeros((N, 3)))
 mseFreq = SharedArray(zeros((N, 3)))
 biasSepd = SharedArray(zeros((N, 3)))

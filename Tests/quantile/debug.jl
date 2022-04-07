@@ -6,9 +6,23 @@ using .AEPD, .QuantileReg, .FreqQuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, HTTP
 
+## Find quantiles
+# τ = 0.1
+Gumbel(0, 5)
+quantile(Gumbel(4.1701670167016704, 5), 0.1)
+loc = range(4, 4.5, length = 10000)
+
+abs.(quantile.(Gumbel.(loc, 5), 0.1)) |> argmin
+loc[3404]
+
+loc = range(1, 1.5, length = 10000)
+abs.(quantile.(NoncentralT.(6, loc), 0.1)) |> argmin
+loc[5631]
+histogram(rand(NoncentralT(6, loc[5631]), 10000))
+quantile(NoncentralT(6, 1.2815281528152815), 0.1)
+
 ## Testing package
 # using SepdQuantile, Random, Distributions
-
 ϵ = zeros(n)
 val = 1
 while val > 0.01
@@ -86,6 +100,7 @@ function mcτ(τ, α, p, σ, n = 1000, N = 1000)
     mean(res)
 end
 
+histogram(bivmix(10000,  0.5, -1.5, 1.5, 1, 1))
 
 dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame
 scatter(dat[1:(size(dat,1)-1), :Temperature], dat[2:size(dat,1), :Temperature])

@@ -44,44 +44,72 @@ end
 end
 
 ## RMSE & bias comparison
+n = 200
+X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+
 N = 1000
 mseSepd = SharedArray(zeros((N, 3)))
 mseFreq = SharedArray(zeros((N, 3)))
 biasSepd = SharedArray(zeros((N, 3)))
 biasFreq = SharedArray(zeros((N, 3)))
-resQuant = SharedArray(zeros((N, 2)))
-n = 200
-X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+biasQr = SharedArray(zeros((N, 3)))
+mseQr = SharedArray(zeros((N, 3)))
+resQuant = SharedArray(zeros((N, 3)))
+
+control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
+  :is_se => false, :est_beta => true, :est_sigma => true,
+  :est_p => true, :est_tau => true, :log => false, :verbose => false)
+
 # ϵᵦ = 0.9 for ϵ = rand(Normal(-1.281456, 1), n)
+τ = 0.1
 @sync @distributed for i ∈ 1:N
     println(i)
-    # ϵ = rand(Normal(-1.281456, 1), n)
+    #ϵ = rand(Normal(), n)
+    # ϵ = rand(TDist(5), n)
+    # ϵ = rand(Normal(1.281456, 1), n)
+    # ϵ = rand(Gumbel(4.1701670167016704, 5), n)
+    ϵ = rand(NoncentralT(6, 1.2815281528152815), n)
     # ϵ = -6.192839 .+ rand(Chisq(3), n)
-    ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
+    # ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
+    #ϵ = bivmix(n,  1-0.88089, -1, 2.5, 1, 0.5)
+    # ϵ = bivmix(n,  0.5, -1.5, 1.5, 1, 1)
     y = X*ones(3) + ϵ
-
+    # Bayesian
     par = Sampler(y, X, 0.5, 12000, 5, 4000)
     β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]; verbose = false)
-    par.α = mcτ(0.9, mean(α), mean(θ), mean(σ))
-
+    par.α = mcτ(τ, mean(α), mean(θ), mean(σ))
     βlp = mcmc(par, .25, mean(θ), mean(σ), [0., 0., 0.]; verbose = false)
     blp = mean(βlp, dims = 1)'
-    bqr = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, 0.9) |> coef
+    # Frequentist
+    control[:est_sigma], control[:est_tau], control[:est_p] = (true, true, true)
+    res = quantfreq(y, X, control)
+    taufreq = mcτ(τ, res[:tau], res[:p], res[:sigma])
+    control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
+    res = quantfreq(y, X, control, res[:sigma], res[:p], taufreq)
+    # Classical
+    bqr = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, τ) |> coef
 
     #res[i, 1] = mean((blp-ones(3)).^2)
     mseSepd[i,:] = (blp-ones(3)).^2
     biasSepd[i,:] = blp-ones(3)
     #res[i, 2] = mean((bqr-ones(3)).^2)
-    mseFreq[i,:] = (bqr-ones(3)).^2
-    biasFreq[i,:] = bqr-ones(3)
+    mseQr[i,:] = (bqr-ones(3)).^2
+    biasQr[i,:] = bqr-ones(3)
+    #
+    mseFreq[i, :] = (res[:beta] - ones(3)).^2
+    biasFreq[i, :] = res[:beta] - ones(3)
+
     resQuant[i, 1] = mean(par.y .<= par.X * blp)
     resQuant[i, 2] = mean(par.y .<= par.X * bqr)
+    resQuant[i, 3] = mean(par.y .<= par.X * res[:beta])
 end
 
-sqrt.(mean(mseSepd, dims = 1)) |> println
-sqrt.(mean(mseFreq, dims = 1)) |> println
 mean(biasSepd, dims = 1) |> println
+sqrt.(mean(mseSepd, dims = 1)) |> println
 mean(biasFreq, dims = 1) |> println
+sqrt.(mean(mseFreq, dims = 1)) |> println
+mean(biasQr, dims = 1) |> println
+sqrt.(mean(mseQr, dims = 1)) |> println
 mean(resQuant, dims = 1) |> println
 
 

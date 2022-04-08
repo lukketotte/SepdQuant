@@ -15,22 +15,22 @@ mutable struct Sampler{T <: Real, M <: Real, Response <: AbstractVector, ModelMa
     nMCMC::Int
     thin::Int
     burnIn::Int
-    πθ::String
+    θlower::Number
 end
 
-function Sampler(y::AbstractVector{T}, X::AbstractMatrix{M}, α::Real, nMCMC::Int, thin::Int, burnIn::Int, πθ::String) where {T,M <: Real}
+function Sampler(y::AbstractVector{T}, X::AbstractMatrix{M}, α::Real, nMCMC::Int, thin::Int, burnIn::Int, θlower::Number) where {T,M <: Real}
     nMCMC > 0 || thin > 0 || burnIn > 0 || throw(DomainError("Integers can't be negative"))
     α > 0 || α < 1 || throw(DomainError("α ∉ (0,1)"))
     y = T <: Int ?  log.(y + rand(Uniform(), length(y))) : y
     length(y) === size(X)[1] || throw(DomainError("Size of y and X not matching"))
-    Sampler{T, M, typeof(y), typeof(X)}(y, X, α, nMCMC, thin, burnIn, πθ)
+    Sampler{T, M, typeof(y), typeof(X)}(y, X, α, nMCMC, thin, burnIn, θlower)
 end
 
 Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int, πθ::String) = Sampler(y, X, α, nMCMC, 1, 1, πθ)
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int) = Sampler(y, X, α, nMCMC, 1, 1, "jeffrey")
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int, thin::Int, burnIn::Int) = Sampler(y, X, α, nMCMC, thin, burnIn, "jeffrey")
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, nMCMC::Int) = Sampler(y, X, 0.5, nMCMC, 1, 1, "jeffrey")
-Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}) = Sampler(y, X, 0.5, 5000, 1, 1, "jeffrey")
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int) = Sampler(y, X, α, nMCMC, 1, 1, 1.)
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, α::Real, nMCMC::Int, thin::Int, burnIn::Int) = Sampler(y, X, α, nMCMC, thin, burnIn, 1.)
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, nMCMC::Int) = Sampler(y, X, 0.5, nMCMC, 1, 1, 1.)
+Sampler(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}) = Sampler(y, X, 0.5, 5000, 1, 1, 1.)
 
 data(s::Sampler) = (s.y, s.X)
 param(s::Sampler) = (s.y, s.X, s.α)
@@ -45,12 +45,12 @@ end
 function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
     n = length(s.y)
     a = gamma(1+1/θ)^θ * kernel(s, β, θ)
-    return -log(θ) + loggamma(n/θ) - (n/θ) * log(a) + (s.πθ === "jeffrey" ? log(πθ(θ)) : 0)
+    return -log(θ) + loggamma(n/θ) - (n/θ) * log(a)
 end
 
-function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real; trunc = 1.)
-    prop = rand(Truncated(Normal(θ, ε^2), trunc, Inf))
-    a = logpdf(Truncated(Normal(prop, ε^2), trunc, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), trunc, Inf), prop)
+function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
+    prop = rand(Truncated(Normal(θ, ε^2), s.θlower, Inf))
+    a = logpdf(Truncated(Normal(prop, ε^2), s.θlower, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), s.θlower, Inf), prop)
     return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
@@ -81,10 +81,10 @@ end
 
 function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
     ∇ = ∂β(β, s, θ, σ)
-    H = (∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
+    H = real((∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
     prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
     ∇ₚ = ∂β(prop, s, θ, σ)
-    Hₚ = (∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric
+    Hₚ = real((∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
     αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
     αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * H * ∇, ε^2 * H), prop)
     αᵦ += logpdf(MvNormal(prop + ε^2/2 * Hₚ * ∇ₚ, ε^2 * Hₚ), β)

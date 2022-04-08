@@ -251,20 +251,23 @@ test = (plt_dat1[:, :old] + plt_dat2[:, :old])/2
 
 
 # simulation with other random errors
-quant = [0.1, 0.5, 0.9]
+n = 250;
+x = rand(Normal(), n);
+X = hcat(ones(n), x)
 
+quant = [0.1, 0.5, 0.9]
 #dists = ["Gumbel", "Erlang", "Tdist", "Chi"]
 dists = [1,2,3,4]
 
 settings = DataFrame(tau = repeat(quant, length(dists)), dist = repeat(dists, inner = length(quant)),
     bayes = 0, sdBayes = 0, freq = 0, sdFreq = 0, old = 0, sdOld = 0)
 
-
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
 reps = 20
 
 @sync @distributed for i ∈ 1:size(settings, 1)
+    println(i)
     old, bayes, freq = [zeros(reps) for i in 1:3]
     for j ∈ 1:reps
         if settings[i, 2] == 1 #"Gumbel"
@@ -281,8 +284,8 @@ reps = 20
             ε = [0.8, 1.]
         end
         # bayesian
-        par = Sampler(y, X, 0.5, 10000, 5, 2500)
-        β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5])
+        par = Sampler(y, X, 0.5, 12000, 5, 2000)
+        β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0.]; verbose = false)
         μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1))
 
         # Freq
@@ -297,20 +300,16 @@ reps = 20
 
         b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, settings[i, 1]) |> coef
         q = X * b
-        if n >= 250
-            taubayes = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(y)] |> mean
-            taufreq  = [quantconvert(q[k], res[:p], res[:tau], μf[k], res[:sigma]) for k in 1:length(y)] |> mean
-        else
-            taubayes = mcτ(α[i], median(α), median(θ), median(σ), 2500)
-            taufreq  = mcτ(α[i], res[:tau], res[:p], res[:sigma], 2500)
-        end
+
+        taubayes = mcτ(α[i], median(α), median(θ), median(σ), 2500)
+        taufreq  = mcτ(α[i], res[:tau], res[:p], res[:sigma], 2500)
 
         par.α = taubayes
-        βres= mcmc(par, 1.3, median(θ), median(σ), b);
+        βres= mcmc(par, 0.25, median(θ), median(σ), b);
 
         par.α = settings[i, 1]
-        par.πθ = "uniform"
-        βt, _, _ = mcmc(par, ε[1], ε[2], 1.5, 2, b)
+        par.θlower = 0.5
+        βt, _, _ = mcmc(par, ε[1], ε[2], 1.5, 2, [0., 0.]; verbose = false)
 
         control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
         res = quantfreq(y, X, control, res[:sigma], res[:p], taufreq)
@@ -328,7 +327,7 @@ reps = 20
 end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250.csv", plt_dat)
+#CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250.csv", plt_dat)
 
 ## Bootstrap τ on davids data?
 reps = 20

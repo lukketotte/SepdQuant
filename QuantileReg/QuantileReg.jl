@@ -2,7 +2,7 @@ module QuantileReg
 
 export mcmc, Sampler, acceptance
 
-using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff
+using Distributions, LinearAlgebra, StatsBase, SpecialFunctions, ProgressMeter, ForwardDiff, PDMats
 
 """
     Sampler(y, X, α, nMCMC, thin, burnIn)
@@ -49,8 +49,8 @@ function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
 end
 
 function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
-    prop = rand(Truncated(Normal(θ, ε^2), s.θlower, Inf))
-    a = logpdf(Truncated(Normal(prop, ε^2), s.θlower, Inf), θ) - logpdf(Truncated(Normal(θ, ε^2), s.θlower, Inf), prop)
+    prop = rand(truncated(Normal(θ, ε^2), s.θlower, Inf))
+    a = logpdf(truncated(Normal(prop, ε^2), s.θlower, Inf), θ) - logpdf(truncated(Normal(θ, ε^2), s.θlower, Inf), prop)
     return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
@@ -59,8 +59,8 @@ function αcond(α::Real, s::Sampler, θ::Real, σ::Real, β::AbstractVector{<:R
 end
 
 function sampleα(s::Sampler, ε::Real, θ::Real, σ::Real, β::AbstractVector{<:Real})
-    prop = rand(Truncated(Normal(s.α, ε^2), 0, 1))
-    a = logpdf(Truncated(Normal(prop, ε^2), 0, 1), s.α) - logpdf(Truncated(Normal(s.α, ε^2), 0, 1), prop) +
+    prop = rand(truncated(Normal(s.α, ε^2), 0, 1))
+    a = logpdf(truncated(Normal(prop, ε^2), 0, 1), s.α) - logpdf(truncated(Normal(s.α, ε^2), 0, 1), prop) +
         αcond(prop, s, θ, σ, β) - αcond(s.α, s, θ, σ, β)
     s.α = a >= log(rand(Uniform(0,1), 1)[1]) ? prop : s.α
     nothing
@@ -81,25 +81,29 @@ end
 
 function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
     ∇ = ∂β(β, s, θ, σ)
-    H = real((∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
-    prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
+    #H = real((∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
+    H = try
+            (PDMat(Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))))^(-1)
+        catch e
+            if isa(e, PosDefException)
+                A = Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))
+                (PDMat(A + I*eigmax(A)))^(-1)
+            end
+        end
+    prop = β + ε^2 * H / 2 * ∇ + ε * H^(0.5) * vec(rand(MvNormal(zeros(length(β)), I), 1))
     ∇ₚ = ∂β(prop, s, θ, σ)
-    Hₚ = real((∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
+    #Hₚ = real((∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
+    Hₚ = try
+            (PDMat(Symmetric(∂β2(prop, s, maximum([θ, 1.01]), σ))))^(-1)
+        catch e
+            if isa(e, PosDefException)
+                A = Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))
+                (PDMat(A + I*eigmax(A)))^(-1)
+            end
+        end
     αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
     αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * H * ∇, ε^2 * H), prop)
     αᵦ += logpdf(MvNormal(prop + ε^2/2 * Hₚ * ∇ₚ, ε^2 * Hₚ), β)
-    return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
-end
-
-function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real, τ::Real)
-    λ = abs.(rand(Cauchy(0,1), length(β)))
-    ∇ = ∂β(β, s, θ, σ, τ, λ)
-    H = (∂β2(β, s, maximum([θ, 1.0001]), σ, τ, λ))^(-1) |> Symmetric
-    prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
-    ∇ₚ = ∂β(prop, s, θ, σ, τ, λ)
-    Hₚ = (∂β2(prop, s, maximum([θ, 1.0001]), σ, τ, λ))^(-1) |> Symmetric
-    αᵦ = logβCond(prop, s, θ, σ, τ, λ) - logβCond(β, s, θ, σ, τ, λ)
-    αᵦ += - logpdf(MvNormal(β + ε .^2 / 2 * H * ∇, ε^2 * H), prop) + logpdf(MvNormal(prop + ε^2/2 * Hₚ * ∇ₚ, ε^2 * Hₚ), β)
     return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
 end
 

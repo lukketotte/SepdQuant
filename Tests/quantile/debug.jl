@@ -6,6 +6,80 @@ using .AEPD, .QuantileReg, .FreqQuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, HTTP
 
+
+rand(Uniform(), 10)
+A = rand(5, 5)
+
+using PDMats
+
+A = PDMat(A*A')
+
+A^(0.5) * A^(0.5)
+
+try
+    PDMat(A)
+catch e
+    if isa(e, PosDefException)
+        PDMat(A + I*maximum(real(eigen(A).values)))
+    end
+end
+
+kernel(s::Sampler, β::AbstractVector{<:Real}, θ::Real) = s.y-s.X*β |> z -> (sum((.-z[z.<0]).^θ)/s.α^θ + sum(z[z.>0].^θ)/(1-s.α)^θ)
+
+function logβCond(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real)
+    return - gamma(1+1/θ)^θ/σ^θ * kernel(s, β, θ)
+end
+
+∂β(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real) = ForwardDiff.gradient(β -> logβCond(β, s, θ, σ), β)
+∂β2(β::AbstractVector{<:Real}, s::Sampler, θ::Real, σ::Real) = ForwardDiff.jacobian(β -> -∂β(β, s, θ, σ), β)
+
+function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, σ::Real)
+    ∇ = ∂β(β, s, θ, σ)
+    #H = real((∂β2(β, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
+    H = try
+            (PDMat(Symmetric((∂β2(β, s, maximum([θ, 1.01])), σ))))^(-1)
+        catch e
+            if isa(e, PosDefException)
+                A = Symmetric((∂β2(β, s, maximum([θ, 1.01])), σ))
+                (PDMat(A + I*eigmax(A)))^(-1)
+            end
+        end
+    prop = β + ε^2 * H / 2 * ∇ + ε * √H * vec(rand(MvNormal(zeros(length(β)), 1), 1))
+    ∇ₚ = ∂β(prop, s, θ, σ)
+    Hₚ = real((∂β2(prop, s, maximum([θ, 1.01]), σ))^(-1) |> Symmetric)
+    Hₚ = try
+            (PDMat(Symmetric(∂β2(prop, s, maximum([θ, 1.01])), σ)))^(-1)
+        catch e
+            if isa(e, PosDefException)
+                A = Symmetric((∂β2(β, s, maximum([θ, 1.01])), σ))
+                (PDMat(A + I*eigmax(A)))^(-1)
+            end
+        end
+    αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)
+    αᵦ += - logpdf(MvNormal(β + ε^2 / 2 * H * ∇, ε^2 * H), prop)
+    αᵦ += logpdf(MvNormal(prop + ε^2/2 * Hₚ * ∇ₚ, ε^2 * Hₚ), β)
+    return αᵦ > log(rand(Uniform(0,1), 1)[1]) ? prop : β
+end
+
+n = 200;
+X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+y = X*ones(3) + rand(TDist(2), n)
+par = Sampler(y, X, 0.5, 5000, 5, 1000, 0.5);
+
+sampleβ([0.,0.,0.], 0.25, par, 0.9, 1.)
+∇ = ∂β([0.,0.,0.], par, 0.9, 1.)
+
+H = try
+        (PDMat(Symmetric((∂β2([0.,0.,0.], par, maximum([0.9, 1.01]), 1.)))))^(-1)
+    catch e
+        if isa(e, PosDefException)
+            A = Symmetric((∂β2(β, s, maximum([θ, 1.01])), σ))
+            (PDMat(A + I*eigmax(A)))^(-1)
+        end
+    end
+
+#β, p, σ = mcmc(par, 0.5, 0.5, 1.5, 2, [0., 0., 0.])
+
 ## Find quantiles
 # τ = 0.1
 Gumbel(0, 5)
@@ -37,6 +111,12 @@ histogram(ϵ)
 
 n = 200;
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+y = X*ones(3) + rand(Aepd(0, 1, 0.2, 0.5), n)
+par = Sampler(y, X, 0.5, 5000, 5, 1000, 0.5);
+β, p, σ = mcmc(par, 0.5, 0.5, 1.5, 2, [0., 0., 0.])
+
+plot(βt[:, 1])
+
 y = X*[2, 1, 1] + rand(Normal(-1.281456, 1), n) # shifted so Q_ϵ(0.9)≈0
 y = X*ones(3) + (rand(TDist(3), n) .-1.6369)#(1 .+ X[:,2]).*rand(Normal(), n)
 y = X*ones(3) + [rand(Uniform()) < 0.8 ? rand(Normal()) : rand(Normal(0, 3)) for i in 1:n]

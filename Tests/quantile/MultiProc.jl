@@ -247,12 +247,13 @@ test = (plt_dat1[:, :old] + plt_dat2[:, :old])/2
 
 
 # simulation with other random errors
-n = 250
+n = 1000
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
 quant = [0.1, 0.5, 0.9]
 #dists = ["Gumbel", "Erlang", "Tdist", "Chi"]
 dists = [1,2,3,4]
+#dists = [2]
 
 settings = DataFrame(tau = repeat(quant, length(dists)), dist = repeat(dists, inner = length(quant)),
     bayes = 0, sdBayes = 0, freq = 0, sdFreq = 0, old = 0, sdOld = 0)
@@ -268,16 +269,16 @@ reps = 500
         println(string("Rep: ", j))
         if settings[i, 2] == 1 #"Gumbel"
             y = X*ones(3) + rand(Gumbel(0, 1), n)
-            ε = [0.6, 1]
+            ε = [0.6, 0.5]
         elseif settings[i, 2] == 2#"Erlang"
             y = X*ones(3) + rand(Erlang(7, 0.5), n)
-            ε = [0.6, 1]
+            ε = [0.6, 0.5]
         elseif settings[i, 2] == 3#"Tdist"
             y = X*ones(3) + rand(TDist(5), n)
             ε = [0.6, 0.25]
         else #"Chi"
             y =X*ones(3) + rand(Chi(3), n)
-            ε = [0.8, 1.]
+            ε = [0.6, .5]
         end
         # bayesian
         par = Sampler(y, X, 0.5, 12000, 5, 2000)
@@ -321,9 +322,7 @@ end
 
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
 print(plt_dat)
-#CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother250.csv", plt_dat)
-join(string(1), "test") |> print
-string("Iter: ", 1)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/simsother1000_ones.csv", plt_dat)
 
 ## Bootstrap τ on davids data?
 reps = 20

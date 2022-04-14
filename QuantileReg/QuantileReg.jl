@@ -49,8 +49,8 @@ function θcond(s::Sampler, θ::Real, β::AbstractVector{<:Real})
 end
 
 function sampleθ(s::Sampler, θ::Real, β::AbstractVector{<:Real}, ε::Real)
-    prop = rand(truncated(Normal(θ, ε^2), s.θlower, Inf))
-    a = logpdf(truncated(Normal(prop, ε^2), s.θlower, Inf), θ) - logpdf(truncated(Normal(θ, ε^2), s.θlower, Inf), prop)
+    prop = rand(truncated(Normal(θ, ε^2), s.θlower, 5))
+    a = logpdf(truncated(Normal(prop, ε^2), s.θlower, 5), θ) - logpdf(truncated(Normal(θ, ε^2), s.θlower, 5), prop)
     return θcond(s, prop, β) - θcond(s, θ, β) + a >= log(rand(Uniform(0,1), 1)[1]) ? prop : θ
 end
 
@@ -86,8 +86,10 @@ function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, �
             (PDMat(Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))))^(-1)
         catch e
             if isa(e, PosDefException)
-                A = Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))
-                (PDMat(A + I*eigmax(A)))^(-1)
+                #A = Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))
+                #(PDMat(A + I*eigmax(A)))^(-1)
+                println("Warning: PosDefException for H")
+                (PDMat((s.X's.X) * sum((s.y-s.X*vec(β)).^2)))^(-1)
             end
         end
     prop = β + ε^2 * H / 2 * ∇ + ε * H^(0.5) * vec(rand(MvNormal(zeros(length(β)), I), 1))
@@ -97,8 +99,10 @@ function sampleβ(β::AbstractVector{<:Real}, ε::Real,  s::Sampler, θ::Real, �
             (PDMat(Symmetric(∂β2(prop, s, maximum([θ, 1.01]), σ))))^(-1)
         catch e
             if isa(e, PosDefException)
-                A = Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))
-                (PDMat(A + I*eigmax(A)))^(-1)
+                #A = Symmetric((∂β2(β, s, maximum([θ, 1.01]), σ)))
+                #(PDMat(A + I*eigmax(A)))^(-1)
+                println("Warning: PosDefException for Hₚ")
+                (PDMat((s.X's.X) * sum((s.y-s.X*vec(prop)).^2)))^(-1)
             end
         end
     αᵦ = logβCond(prop, s, θ, σ) - logβCond(β, s, θ, σ)

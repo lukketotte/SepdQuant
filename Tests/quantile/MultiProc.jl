@@ -161,12 +161,13 @@ plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "b
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
 
 ## Simulation study with AEPD error term
-n = 350;
-x = rand(Normal(), n);
-X = hcat(ones(n), x)
+n = 250
+X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
 p = [1.5, 2., 2.5]
 skew = [0.1, 0.5, 0.9]
+skew = [0.9]
+p = [2.5]
 quant = [0.1, 0.5, 0.9]
 # quant = range(0.1, 0.9, length = 3)
 
@@ -177,49 +178,45 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 10
+reps = 500
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
   :est_p => true, :est_tau => true, :log => false, :verbose => false)
 
+#p, skew, τ = 2.5, 0.9, 0.9
+
 @sync @distributed for i ∈ 1:size(settings, 1)
-    println(i)
+    println(string("Iter: ", i))
     p, skew, τ = settings[i, 1:3]
     old, bayes, freq = [zeros(reps) for i in 1:3]
     for j ∈ 1:reps
-        y = 2.1 .+ 0.5 .* x + rand(Aepd(0, 1, p, skew), n);
+        j % 10 == 0 && println(j)
 
+        y = X*ones(3) + rand(Aepd(0, 1, p, skew), n);
         # Bayesian
-        par = Sampler(y, X, skew, 10000, 5, 2500);
-        β, θ, σ, α = mcmc(par, 0.8, .25, 1.5, 1, 2, 0.5, [2.1, 0.5], verbose = false);
-        μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1))
+        par = Sampler(y, X, skew, 10000, 5, 2000);
+        β, θ, σ, α = mcmc(par, 0.8, .25, 1.2, 1, 2, 0.5, [0, 0, 0], verbose = false);
 
         # Freq
         control[:est_sigma], control[:est_tau], control[:est_p] = (true, true, true)
         res = quantfreq(y, X, control)
-        μf = X * res[:beta] |> x -> reshape(x, size(x, 1))
 
-        # Compute τ converted
-        b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3), x, τ) |> coef
+        b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, τ) |> coef
         q = X * b
-        if n >= 350
-            taubayes = [quantconvert(q[k], median(θ), median(α), μ[k], median(σ)) for k in 1:length(par.y)] |> mean
-            taufreq  = [quantconvert(q[k], res[:p], res[:tau], μf[k], res[:sigma]) for k in 1:length(y)] |> mean
-        else
-            taubayes = mcτ(α[i], median(α), median(θ), median(σ), 2500)
-            taufreq  = mcτ(α[i], res[:tau], res[:p], res[:sigma], 2500)
-        end
+
+        taubayes = mcτ(τ, median(α), median(θ), median(σ), 2500)
+        taufreq  = mcτ(τ, res[:tau], res[:p], res[:sigma], 2500)
 
         # Compute estimated quantiles based on conversion
         par.α = taubayes
-        βres = mcmc(par, 1.3, median(θ), median(σ), b, verbose = false)
+        βres = mcmc(par, 0.25, median(θ), median(σ), [0,0,0], verbose = false)
         μ = X * median(βres, dims = 1)' |> x -> reshape(x, size(x, 1))
         bayes[j] = [par.y[k] <= μ[k]  for k in 1:length(par.y)] |> mean
 
         par.α = τ
-        par.πθ = "uniform"
-        βt, _, _ = mcmc(par, .6, .6, 1.2, 2, b, verbose = false)
+        par.θlower = 0.5
+        βt, _, _ = mcmc(par, .6, 1., 1.2, 2, b, verbose = false)
         μ = X * median(βt, dims = 1)' |> x -> reshape(x, size(x, 1))
         old[j] = [par.y[k] <= μ[k]  for k in 1:length(par.y)] |> mean
 
@@ -235,11 +232,11 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
     settings[i, 8] = mean(freq)
     settings[i, 9] = √var(freq)
 end
-
 plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, cols)
-CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_9.csv", plt_dat)
+CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/simulations/sims250_ones.csv", plt_dat)
 
-plt_dat1[:, 4:9]
+plot(βt[:,1])
+plot(θ)
 
 test = (plt_dat1[:, :old] + plt_dat2[:, :old])/2
 

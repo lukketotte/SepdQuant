@@ -113,7 +113,7 @@ end
 
 # AEPD jeffrey's prior, α known
 function mcmc(s::Sampler, ε::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real,
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
+    β₁::AbstractVector{<:Real} = zeros(size(s.X)[1]); verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || θ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
     β = zeros(s.nMCMC, p)
@@ -141,13 +141,13 @@ end
 
 # AEPD jeffrey's prior, α unknown
 function mcmc(s::Sampler, ε::Real, εₐ::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real, α₁::Real,
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
+    β₁::AbstractVector{<:Real} = zeros(size(s.X)[1]); verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || θ₁ > 0 || α > 0 || α < 1 || throw(DomainError("Parameter(s) not in domain"))
     β = zeros(s.nMCMC, p)
     σ, θ, α = [σ₁ ; zeros(s.nMCMC-1)], [θ₁ ; zeros(s.nMCMC-1)], [α₁ ; zeros(s.nMCMC-1)]
     s.α = α₁
-    β[1,:] = !(typeof(β₁) <: Nothing) && β₁
+    β[1,:] = β₁
 
     p = verbose && Progress(s.nMCMC-1, dt=0.5,
         barglyphs=BarGlyphs('|','█', ['▁' ,'▂' ,'▃' ,'▄' ,'▅' ,'▆', '▇'],' ','|',),
@@ -171,12 +171,12 @@ function mcmcInner!(s::Sampler, θ::AbstractVector{<:Real}, σ::AbstractVector{<
 end
 
 function mcmc(s::Sampler, εᵦ::Union{Real, AbstractVector{<:Real}}, θ::Real, σ₁::Real,
-    β₁::Union{AbstractVector{<:Real}, Nothing} = nothing; verbose = true)
+    β₁::AbstractVector{<:Real} = zeros(size(s.X)[1]); verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || throw(DomainError("Shape ands scale must be positive"))
     β = zeros(s.nMCMC, p)
     σ = [σ₁; zeros(s.nMCMC-1)]
-    β[1,:] = !(typeof(β₁) <: Nothing) && β₁
+    β[1,:] = β₁
     σ[1] = σ₁
 
     p = verbose && Progress(s.nMCMC-1, dt=0.5,

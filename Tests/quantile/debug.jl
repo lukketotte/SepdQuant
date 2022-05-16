@@ -6,10 +6,18 @@ using .AEPD, .QuantileReg, .FreqQuantileReg
 
 using Plots, PlotThemes, CSV, DataFrames, StatFiles, CSVFiles, HTTP
 
+## Package test
+using SepdQuantile
 
+n = 250;
+X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n));
+y = X*[2, 1, 1] + rand(Normal(-1.281456, 1), n);
 
-using PDMats
+par = Sampler(y, X, 0.5, 5000, 5, 1000, 1);
+β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]);
 
+plot(β[:,2])
+##
 
 kernel(s::Sampler, β::AbstractVector{<:Real}, θ::Real) = s.y-s.X*β |> z -> (sum((.-z[z.<0]).^θ)/s.α^θ + sum(z[z.>0].^θ)/(1-s.α)^θ)
 
@@ -85,6 +93,7 @@ histogram(ϵ)
 
 n = 250;
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
+y = X*[2, 1, 1] + rand(Normal(-1.281456, 1), n)
 #y = X*ones(3) + rand(Aepd(0, 1, 0.2, 0.5), n)
 y = X*ones(3) + rand(Erlang(7, 0.5), n)
 par = Sampler(y, X, 0.999, 5000, 5, 1000, 0.5);

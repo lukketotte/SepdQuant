@@ -161,7 +161,7 @@ plt_dat = DataFrame(Tables.table(settings)) |> x -> rename!(x, ["tau", "old", "b
 CSV.write("C:/Users/lukar818/Dropbox/PhD/research/applied/quantile/R/plots/tempquant.csv", plt_dat)
 
 ## Simulation study with AEPD error term
-n = 1000
+n = 5000
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
 p = [1.5, 2., 2.5]
@@ -177,7 +177,7 @@ settings = DataFrame(p = repeat(p, inner = length(skew)) |> x -> repeat(x, inner
 
 cols = names(settings)
 settings = SharedArray(Matrix(settings))
-reps = 100
+reps = 30
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,

@@ -9,15 +9,6 @@ using Plots, PlotThemes, CSV, StatFiles, CSVFiles, HTTP
 theme(:juno)
 using Formatting
 
-## α to τ
-@everywhere f(x, b, p, α, μ, σ) = abs(x-b)^(p-1) * pdf(Aepd(μ, σ, p, α), x)
-
-@everywhere function quantconvert(q, p, α, μ, σ)
-    a₁ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, Inf)[1]
-    a₂ = quadgk(x -> f(x, q, p, α, μ, σ), -Inf, q)[1]
-    1/((maximum([a₁/a₂, 1.0001]) - 1)^(1/p) + 1)
-end
-
 @everywhere function mcτ(τ, α, p, σ, n = 1000, N = 1000)
     res = zeros(N)
     for i in 1:N
@@ -43,37 +34,59 @@ end
     res
 end
 
+@everywhere function bayesQR(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, quant::Real, ndraw::Int, keep::Int)
+    rcopy(R"""
+        suppressWarnings(suppressMessages(library(bayesQR, lib.loc = "C:/Users/lukar818/Documents/R/win-library/4.0")))
+        X = $X
+        y = $y
+        quant = $quant
+        ndraw = $ndraw
+        keep = $keep
+        bayesQR(y ~ X[,2] + X[,3], quantile = quant, ndraw = ndraw, keep=keep)[[1]]$betadraw
+    """)
+end
+
 ## RMSE & bias comparison
 n = 200
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
-N = 1000
+N = 500
 mseSepd = SharedArray(zeros((N, 3)))
 mseFreq = SharedArray(zeros((N, 3)))
 biasSepd = SharedArray(zeros((N, 3)))
 biasFreq = SharedArray(zeros((N, 3)))
 biasQr = SharedArray(zeros((N, 3)))
 mseQr = SharedArray(zeros((N, 3)))
-resQuant = SharedArray(zeros((N, 3)))
+mseBqr = SharedArray(zeros((N, 3)))
+biasBqr = SharedArray(zeros((N, 3)))
+resQuant = SharedArray(zeros((N, 4)))
 
 control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :is_se => false, :est_beta => true, :est_sigma => true,
   :est_p => true, :est_tau => true, :log => false, :verbose => false)
 
 # ϵᵦ = 0.9 for ϵ = rand(Normal(-1.281456, 1), n)
-τ = 0.1
+τ = 0.9
 @sync @distributed for i ∈ 1:N
     println(i)
-    #ϵ = rand(Normal(), n)
-    # ϵ = rand(TDist(5), n)
-    # ϵ = rand(Normal(1.281456, 1), n)
-    # ϵ = rand(Gumbel(4.1701670167016704, 5), n)
-    ϵ = rand(NoncentralT(6, 1.2815281528152815), n)
-    # ϵ = -6.192839 .+ rand(Chisq(3), n)
-    # ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
-    #ϵ = bivmix(n,  1-0.88089, -1, 2.5, 1, 0.5)
-    # ϵ = bivmix(n,  0.5, -1.5, 1.5, 1, 1)
+    # ϵ = rand(Normal(), n)
+    #ϵ = rand(TDist(5), n)
+    #ϵ = rand(Normal(-1.281456, 1), n)
+    #ϵ = rand(Gumbel(4.1701670167016704, 5), n)
+    #ϵ = rand(NoncentralT(6, 1.2815281528152815), n)
+    #ϵ = -6.192839 .+ rand(Chisq(3), n)
+    ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
+    # ϵ = bivmix(n,  1-0.88089, -1, 2.5, 1, 0.5)
+    #ϵ = bivmix(n,  0.5, -1.5, 1.5, 1, 1)
     y = X*ones(3) + ϵ
+
+    # Bqr
+    β = bayesQR(y, X, τ, 10000, 4)
+    baqr = mean(β, dims = 1)'
+    mseBqr[i,:] = (baqr-ones(3)).^2
+    biasBqr[i,:] = baqr-ones(3)
+    resQuant[i, 4] = mean(y .<= X * baqr)
+    """
     # Bayesian
     par = Sampler(y, X, 0.5, 12000, 5, 4000)
     β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]; verbose = false)
@@ -102,6 +115,7 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
     resQuant[i, 1] = mean(par.y .<= par.X * blp)
     resQuant[i, 2] = mean(par.y .<= par.X * bqr)
     resQuant[i, 3] = mean(par.y .<= par.X * res[:beta])
+    """
 end
 
 mean(biasSepd, dims = 1) |> println
@@ -112,8 +126,19 @@ mean(biasQr, dims = 1) |> println
 sqrt.(mean(mseQr, dims = 1)) |> println
 mean(resQuant, dims = 1) |> println
 
+[mean(biasBqr[findall(.!isnan.(biasBqr[:,i])),i]) for i in 1:3] |> println
+[sqrt.(mean(mseBqr[findall(.!isnan.(biasBqr[:,i])),i])) for i in 1:3] |> println
+mean(resQuant, dims = 1) |> println
 
 res2 = res
+
+
+isnan.(biasBqr[:,1]) |> sum
+
+biasBqr[6,1]
+findall(.!isnan.(biasBqr))
+
+biasBqr[N,:]
 
 ## Application, max temp in Melbourne?
 dat = HTTP.get("https://raw.githubusercontent.com/jbrownlee/Datasets/master/daily-max-temperatures.csv") |> x -> CSV.File(x.body) |> DataFrame

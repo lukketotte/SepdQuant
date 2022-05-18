@@ -59,7 +59,7 @@ function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M},
 
     loss_fun_sigma_p_tau <- function(sigma_p_tau){
       sigma <- abs(sigma_p_tau[1])
-      p <- abs(sigma_p_tau[2])
+      p <- max(c(abs(sigma_p_tau[2]), 1))
       tau <- sigma_p_tau[3]
       n <- length(y)
       loss <- -1.0*loglik_fun(y,x,beta_new,sigma,p,tau)

@@ -1,4 +1,4 @@
-using Distributions, QuantileRegressions, LinearAlgebra, Random, SpecialFunctions, QuadGK
+using Distributions, QuantileRegressions, LinearAlgebra, Random, SpecialFunctions, QuadGK, RCall
 include("../aepd.jl")
 include("../../QuantileReg/QuantileReg.jl")
 using .AEPD, .QuantileReg
@@ -14,6 +14,26 @@ scatter(dat[1:(size(dat,1)-1), :Temperature], dat[2:size(dat,1), :Temperature])
 
 y = log.(dat[2:size(dat, 1),:Temperature])
 X = hcat(ones(length(y)), log.(dat[1:(size(dat,1)-1),:Temperature]))
+
+quants = rcopy(R"""
+suppressWarnings(suppressMessages(library(bayesQR, lib.loc = "C:/Users/lukar818/Documents/R/win-library/4.0")))
+y = $y
+x = $X
+quants = seq(0.1, 0.9, length.out = 9)
+res = numeric(9)
+for(i in 1:9){
+        beta = bayesQR(y ~ x[,2], quantile=quants[i], ndraw = 12000, keep = 1)[[1]]$betadraw
+        ids = complete.cases(beta)
+        res[i] = mean(y[ids] <= c(x[ids,] %*% colMeans(beta[ids, ])))
+    }
+res
+""")
+quants
+
+quants2 = quants
+
+[mean(β[findall(.!isnan.(β[:,i])),i]) for i in 1:2] |> println
+[√var(β[findall(.!isnan.(β[:,i])),i]) for i in 1:2] |> println
 
 par = Sampler(y, X, 0.5, 10000, 1, 1000);
 β, θ, σ, α = mcmc(par, .3, 0.11, 1.1, 2, 1, 0.5, rand(size(par.X, 2)));
@@ -177,12 +197,29 @@ y = log.(dat[:, :MedV])
 X = dat[:, Not(["MedV"])] |> Matrix
 X = hcat([1 for i in 1:length(y)], X);
 
+rcopy(R"""
+suppressWarnings(suppressMessages(library(bayesQR, lib.loc = "C:/Users/lukar818/Documents/R/win-library/4.0")))
+dat = $dat
+bayesQR(MedV ~ ., dat, ndraw = 2000)
+""")
+
+function bayesQR(dat::DataFrame, y::Symbol, quant::Real, ndraw::Int, keep::Int)
+    rcopy(R"""
+        suppressWarnings(suppressMessages(library(bayesQR, lib.loc = "C:/Users/lukar818/Documents/R/win-library/4.0")))
+        quant = $quant
+        ndraw = $ndraw
+        keep = $keep
+        bayesQR(y ~ X[,2] + X[,3], quantile = quant, ndraw = ndraw, keep=keep)[[1]]$betadraw
+    """)
+end
+
 par = Sampler(y, X, 0.5, 10000, 5, 2000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 +
         x11 + x12 + x13 + x14 + x15), x, 0.5) |> coef;
 
-β, θ, σ, α = mcmc(par, 0.25, .25, 0.05, 1, 2, 0.5, b);
+#mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]);
+β, θ, σ, α = mcmc(par, 0.25, .2, 0.4, 1, 2, 0.5, zeros(14));
 
 acceptance(β)
 acceptance(θ)
@@ -193,11 +230,17 @@ plot(β[:,2])
 
 b = DataFrame(hcat(par.y, par.X), :auto) |> x ->
     qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10 +
-        x11 + x12 + x13 + x14 + x15), x, 0.1) |> coef;
+        x11 + x12 + x13 + x14 + x15), x, 0.9) |> coef;
 q = X * b;
 μ = X * median(β, dims = 1)' |> x -> reshape(x, size(x, 1));
 τ = [quantconvert(q[j], median(θ), median(α), μ[j],
     median(σ)) for j in 1:length(par.y)] |> mean
+
+par.α = mcτ(0.9, mean(α), mean(θ), mean(σ))
+βlp = mcmc(par, .0001, mean(θ), mean(σ), b)
+acceptance(βlp)
+
+plot(βlp[:,3])
 
 par.α = τ;
 par.nMCMC = 4000
@@ -241,6 +284,7 @@ plot(βres[:,2])
 
 ## Prostate data
 dat = load(string(pwd(), "/Tests/data/prostate.csv")) |> DataFrame;
+
 names(dat)
 y = dat[:, :lpsa]
 X = hcat(ones(length(y)), Matrix(dat[:,2:9]))
@@ -248,9 +292,10 @@ X = hcat(ones(length(y)), Matrix(dat[:,2:9]))
 par = Sampler(y, X, 0.5, 10000, 1, 5000);
 b = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10), x, 0.5) |> coef;
 
-β, θ, σ, α = mcmc(par, 1, 0.25, 0.7, 1, 2, 0.5, b);
+β, θ, σ, α = mcmc(par, 1, 0.25, 0.7, 1, 2, 0.5, zeros(9));
 acceptance(β)
 acceptance(α)
+acceptance(θ)
 plot(σ)
 plot(β[:,2])
 plot(θ)
@@ -268,9 +313,23 @@ for i in 1:n
 end
 par.α = mean(res)
 
-βres, _ = mcmc(par, 0.00005, median(θ), median(σ), b);
+par.α = mcτ(0.9, mean(α), mean(θ), mean(σ))
+βres = mcmc(par, 0.6, median(θ), median(σ), zeros(9));
 plot(βres[:,4])
 acceptance(βres)
 
 [par.y[i] <= q[i] for i in 1:length(y)] |> mean
 [par.y[i] <= X[i,:] ⋅ median(βres, dims = 1)  for i in 1:length(par.y)] |> mean
+
+dat2 = dat[:,2:10]
+b = rcopy(R"""
+suppressWarnings(suppressMessages(library(bayesQR, lib.loc = "C:/Users/lukar818/Documents/R/win-library/4.0")))
+dat = $dat2
+bayesQR(lpsa ~ ., dat, quantile = 0.9, ndraw = 10000, keep=4)[[1]]$betadraw
+""")
+
+.√(var(b,dims=1)) |> println
+.√(var(βres,dims=1)) |> println
+
+mean(βres,dims=1) |> println
+mean(b,dims=1) |> println

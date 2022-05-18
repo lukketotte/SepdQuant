@@ -24,6 +24,7 @@ end
 β = bayesQR(y, X, 0.9, 10000, 4)
 mean(β, dims = 1) |> vec
 
+size(par.X, 2)
 
 ## Package test
 using SepdQuantile

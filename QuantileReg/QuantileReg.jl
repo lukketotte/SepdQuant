@@ -141,7 +141,7 @@ end
 
 # AEPD jeffrey's prior, α unknown
 function mcmc(s::Sampler, ε::Real, εₐ::Real, εᵦ::Union{Real, AbstractVector{<:Real}}, σ₁::Real, θ₁::Real, α₁::Real,
-    β₁::AbstractVector{<:Real} = zeros(size(s.X)[1]); verbose = true)
+    β₁::AbstractVector{<:Real} = zeros(size(s.X, 2)); verbose = true)
     n, p = size(s.X)
     σ₁ > 0 || θ₁ > 0 || α > 0 || α < 1 || throw(DomainError("Parameter(s) not in domain"))
     β = zeros(s.nMCMC, p)

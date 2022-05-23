@@ -114,7 +114,7 @@ function quantfreq(y::AbstractVector{T}, X::AbstractMatrix{M},
 
       beta_curr <- beta_new
       sigma_curr <- sigma_new
-      p_curr <- p_new
+      p_curr <- max(c(1,p_new))
       tau_curr <- tau_new
 
 

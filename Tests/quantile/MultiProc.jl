@@ -50,7 +50,7 @@ end
 n = 200
 X = hcat(ones(n), rand(Normal(), n), rand(Normal(), n))
 
-N = 500
+N = 250
 mseSepd = SharedArray(zeros((N, 3)))
 mseFreq = SharedArray(zeros((N, 3)))
 biasSepd = SharedArray(zeros((N, 3)))
@@ -66,19 +66,26 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
   :est_p => true, :est_tau => true, :log => false, :verbose => false)
 
 # ϵᵦ = 0.9 for ϵ = rand(Normal(-1.281456, 1), n)
-τ = 0.9
+τ = 0.5
 @sync @distributed for i ∈ 1:N
     println(i)
-    # ϵ = rand(Normal(), n)
+    ϵ = (1 .+ X[:,2]).*rand(Normal(), n)
     #ϵ = rand(TDist(5), n)
     #ϵ = rand(Normal(-1.281456, 1), n)
     #ϵ = rand(Gumbel(4.1701670167016704, 5), n)
     #ϵ = rand(NoncentralT(6, 1.2815281528152815), n)
     #ϵ = -6.192839 .+ rand(Chisq(3), n)
-    ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
+    #ϵ = bivmix(n,  0.88089, -2.5, 1, 0.5, 1)
     # ϵ = bivmix(n,  1-0.88089, -1, 2.5, 1, 0.5)
     #ϵ = bivmix(n,  0.5, -1.5, 1.5, 1, 1)
     y = X*ones(3) + ϵ
+
+    # Frequentist
+    control[:est_sigma], control[:est_tau], control[:est_p] = (true, true, true)
+    res = quantfreq(y, X, control, 2., 1.)
+    taufreq = mcτ(τ, res[:tau], res[:p], res[:sigma])
+    control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
+    res = quantfreq(y, X, control, res[:sigma], res[:p], taufreq)
 
     # Bqr
     β = bayesQR(y, X, τ, 10000, 4)
@@ -86,19 +93,14 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
     mseBqr[i,:] = (baqr-ones(3)).^2
     biasBqr[i,:] = baqr-ones(3)
     resQuant[i, 4] = mean(y .<= X * baqr)
-    """
+
     # Bayesian
     par = Sampler(y, X, 0.5, 12000, 5, 4000)
     β, θ, σ, α = mcmc(par, 0.5, 0.5, 1., 1, 2, 0.5, [0., 0., 0.]; verbose = false)
     par.α = mcτ(τ, mean(α), mean(θ), mean(σ))
     βlp = mcmc(par, .25, mean(θ), mean(σ), [0., 0., 0.]; verbose = false)
     blp = mean(βlp, dims = 1)'
-    # Frequentist
-    control[:est_sigma], control[:est_tau], control[:est_p] = (true, true, true)
-    res = quantfreq(y, X, control)
-    taufreq = mcτ(τ, res[:tau], res[:p], res[:sigma])
-    control[:est_sigma], control[:est_tau], control[:est_p] = (false, false, false)
-    res = quantfreq(y, X, control, res[:sigma], res[:p], taufreq)
+
     # Classical
     bqr = DataFrame(hcat(par.y, par.X), :auto) |> x -> qreg(@formula(x1 ~  x3 + x4), x, τ) |> coef
 
@@ -108,14 +110,13 @@ control =  Dict(:tol => 1e-3, :max_iter => 1000, :max_upd => 0.3,
     #res[i, 2] = mean((bqr-ones(3)).^2)
     mseQr[i,:] = (bqr-ones(3)).^2
     biasQr[i,:] = bqr-ones(3)
-    #
+    # freq
     mseFreq[i, :] = (res[:beta] - ones(3)).^2
     biasFreq[i, :] = res[:beta] - ones(3)
 
     resQuant[i, 1] = mean(par.y .<= par.X * blp)
     resQuant[i, 2] = mean(par.y .<= par.X * bqr)
     resQuant[i, 3] = mean(par.y .<= par.X * res[:beta])
-    """
 end
 
 mean(biasSepd, dims = 1) |> println

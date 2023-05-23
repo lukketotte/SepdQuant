@@ -21,6 +21,11 @@ function bayesQR(y::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, quant::Re
     """)
 end
 
+x = bivmix(1000000,  0.88089, -2.5, 1, 0.5, 1.)
+using Plots, StatsPlots
+quantile(x, 0.9)
+density(x)
+
 β = bayesQR(y, X, 0.9, 10000, 4)
 mean(β, dims = 1) |> vec
 
